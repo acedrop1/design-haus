@@ -81,7 +81,8 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         console.log("🔍 [ADMIN] Auto-gen check:", {
             selectedSessionId,
             messageCount: activeMessages.length,
-            hasPendingDesign: !!pendingDesign
+            hasPendingDesign: !!pendingDesign,
+            hasImageUrl: pendingDesign?.imageUrl ? true : false
         });
 
         if (!selectedSessionId) {
@@ -94,8 +95,9 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             return;
         }
 
-        if (pendingDesign) {
-            console.log("⏭️ [ADMIN] Already has pendingDesign, skipping auto-gen");
+        // Check if pendingDesign has an actual image, not just if it exists
+        if (pendingDesign?.imageUrl) {
+            console.log("⏭️ [ADMIN] Already has pendingDesign with image, skipping auto-gen");
             return;
         }
 
@@ -139,6 +141,38 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     }, [selectedSessionId, activeMessages, pendingDesign]);
 
     // Actions
+    const handleGenerateDesign = async () => {
+        if (!selectedSessionId || !activeMessages.length) return;
+
+        const lastClientMessage = [...activeMessages]
+            .reverse()
+            .find(msg => msg.role === 'user');
+
+        if (!lastClientMessage) {
+            alert("No client message found to generate from");
+            return;
+        }
+
+        console.log("🎨 [ADMIN] Manual generate triggered for:", lastClientMessage.content);
+
+        try {
+            const result = await generatePackagingDesign(lastClientMessage.content);
+            console.log("🎨 [ADMIN] AI Result:", result);
+
+            if (result.success && result.imageUrl) {
+                await StorageService.updateSessionPendingDesign(selectedSessionId, {
+                    originalPrompt: lastClientMessage.content,
+                    imageUrl: result.imageUrl,
+                    status: 'generated'
+                });
+                console.log("✅ [ADMIN] Design generated and saved");
+            }
+        } catch (error) {
+            console.error("❌ [ADMIN] Manual generation failed:", error);
+            alert("Failed to generate design. Check console.");
+        }
+    };
+
     const handleRefine = async () => {
         if (!selectedSessionId || !pendingDesign) return;
         await StorageService.updateSessionPendingDesign(selectedSessionId, {
@@ -252,12 +286,21 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             <div className="flex-1 flex flex-col h-full relative bg-black">
                 {/* Top Bar */}
                 <div className="h-16 flex items-center justify-between px-6 bg-transparent z-10 w-full border-b border-zinc-900">
-                    <button
-                        onClick={onToggleSidebar}
-                        className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
-                    >
-                        {isSidebarOpen ? "Close Menu" : "Menu"}
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={onToggleSidebar}
+                            className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
+                        >
+                            {isSidebarOpen ? "Close Menu" : "Menu"}
+                        </button>
+                        <button
+                            onClick={handleGenerateDesign}
+                            className="bg-green-600 text-white px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-green-500 transition-colors flex items-center gap-2"
+                        >
+                            <Wand2 className="w-4 h-4" />
+                            Generate Design
+                        </button>
+                    </div>
                     <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
                         Target: {selectedSessionId === currentSessionId ? "This Device" : selectedSessionId?.slice(0, 6)}
                     </div>
