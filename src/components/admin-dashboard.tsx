@@ -305,4 +305,8 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                 </div>
             </div>
         </div>
+                </div >
+            </div >
+        </div >
     );
+}
