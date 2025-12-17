@@ -152,12 +152,18 @@ Describe your vision, and you'll receive your file! 🍫`
 
         // 1. Write User Message to Service (Critical - must succeed)
         try {
-            await StorageService.addMessage(sessionId, {
+            const userMessage: any = {
                 role: 'user',
                 content: text,
-                audioUrl: audioUrl || undefined,
                 attachments: attachments
-            });
+            };
+
+            // Only add audioUrl if it exists (Firebase doesn't accept undefined)
+            if (audioUrl) {
+                userMessage.audioUrl = audioUrl;
+            }
+
+            await StorageService.addMessage(sessionId, userMessage);
         } catch (error) {
             console.error("CRITICAL: Message Send Failed:", error);
             alert("Could not send message. Please check your connection.");
