@@ -8,90 +8,103 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 export async function generatePackagingDesign(prompt: string, base64Image?: string) {
     console.log("🎨 [SERVER] generatePackagingDesign called with prompt:", prompt);
 
+    // Enhanced prompt for packaging results
+    const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. 
+    Style: Modern, sleek, industrial aesthetic, bold typography. 
+    Object: Physical product box or pouch on a clean background. 
+    Lighting: Studio lighting, 4k, photorealistic, professional product shot.`;
+
     try {
-        const apiKey = process.env.GOOGLE_API_KEY;
+        const replicateKey = process.env.REPLICATE_API_TOKEN;
 
-        if (!apiKey) {
-            console.warn("[SERVER] No GOOGLE_API_KEY found, using mock image");
-            return {
-                success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
-                isMock: true
-            };
+        if (replicateKey) {
+            console.log("[SERVER] Using Replicate FLUX model for image generation");
+
+            const response = await fetch("https://api.replicate.com/v1/predictions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${replicateKey}`,
+                    "Content-Type": "application/json",
+                    "Prefer": "wait"
+                },
+                body: JSON.stringify({
+                    version: "black-forest-labs/flux-schnell",
+                    input: {
+                        prompt: enhancedPrompt,
+                        aspect_ratio: "4:5",
+                        output_format: "png",
+                        output_quality: 90
+                    }
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.output && data.output[0]) {
+                    console.log("[SERVER] Successfully generated image with FLUX");
+                    return {
+                        success: true,
+                        imageUrl: data.output[0],
+                        isMock: false
+                    };
+                }
+            } else {
+                console.warn("[SERVER] Replicate API failed:", response.status);
+            }
         }
 
-        console.log("[SERVER] Using Google Imagen 3 API");
+        // Fallback: Try Google API if available
+        const googleKey = process.env.GOOGLE_API_KEY;
+        if (googleKey) {
+            console.log("[SERVER] Trying Google Gemini for text description");
 
-        // Enhanced prompt for packaging results
-        const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. 
-        Style: Modern, sleek, industrial aesthetic, bold typography. 
-        Object: Physical product box or pouch. 
-        Lighting: Studio lighting, 4k, photorealistic.`;
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const result = await model.generateContent(
+                `You are a packaging design expert. Describe in vivid detail what a ${prompt} product packaging would look like. Focus on colors, typography, materials, and overall aesthetic. Be specific and visual.`
+            );
 
-        // Using Gemini 2.5 Flash (as requested and available)
-        const modelId = "gemini-2.5-flash";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
+            const description = result.response.text();
+            console.log("[SERVER] Generated description:", description.slice(0, 100));
 
-        console.log(`[SERVER] Calling Gemini Model: ${modelId}`);
+            // For now, return a curated stock image that matches the theme
+            const themeImages: Record<string, string> = {
+                "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
+                "coca": "https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800",
+                "holiday": "https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=800",
+                "default": "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800"
+            };
 
-        // Gemini Payload
-        const payload = {
-            contents: [{
-                parts: [{
-                    text: `Generate a photorealistic image of high quality product packaging. ${enhancedPrompt}`
-                }]
-            }]
-        };
+            const lowerPrompt = prompt.toLowerCase();
+            let selectedImage = themeImages.default;
 
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
+            for (const [key, url] of Object.entries(themeImages)) {
+                if (lowerPrompt.includes(key)) {
+                    selectedImage = url;
+                    break;
+                }
+            }
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error(`[SERVER] ${modelId} API Error:`, response.status, errText);
             return {
                 success: true,
-                imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
+                imageUrl: selectedImage,
                 isMock: true,
-                error: `API Call Failed: ${response.status} - ${errText}`
+                description
             };
         }
 
-        const data = await response.json();
-
-        // Check for Gemini Response (Inline Data)
-        const parts = data.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.mimeType.startsWith("image"));
-        const textPart = parts.find((p: any) => p.text);
-
-        if (imagePart) {
-            const base64Image = imagePart.inlineData.data;
-            console.log(`[SERVER] Successfully generated image with ${modelId}`);
-            return {
-                success: true,
-                imageUrl: `data:${imagePart.inlineData.mimeType};base64,${base64Image}`,
-                isMock: false
-            };
-        } else {
-            console.warn("[SERVER] No image in response. Text content:", textPart?.text || "None");
-            console.log("[SERVER] Full response:", JSON.stringify(data).slice(0, 500));
-
-            return {
-                success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
-                isMock: true,
-                error: textPart?.text ? `AI Refusal: ${textPart.text}` : "No image generated"
-            };
-        }
-
-    } catch (error) {
-        console.error("[SERVER] Generation logic failed:", error);
+        // Final fallback
+        console.warn("[SERVER] No API keys available, using fallback image");
         return {
             success: true,
-            imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
+            imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
+            isMock: true
+        };
+
+    } catch (error) {
+        console.error("[SERVER] Generation failed:", error);
+        return {
+            success: true,
+            imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800",
             isMock: true,
             error: String(error)
         };
