@@ -210,7 +210,7 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
         const testDesign = {
             originalPrompt: "TEST DIAGNOSTIC",
-            imageUrl: "https://via.placeholder.com/400x500/FF0000/FFFFFF?text=TEST",
+            imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
             status: 'generated' as const
         };
 
