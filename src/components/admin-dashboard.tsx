@@ -65,8 +65,11 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         });
 
         const unsubSess = StorageService.subscribeToSession(selectedSessionId, (sess: any) => {
+            console.log("🔔 [ADMIN] Session update received:", sess);
             if (sess) {
+                console.log("🔔 [ADMIN] sess.pendingDesign:", sess.pendingDesign);
                 setPendingDesign(sess.pendingDesign || null);
+                console.log("🔔 [ADMIN] setPendingDesign called with:", sess.pendingDesign || null);
             }
         });
 
