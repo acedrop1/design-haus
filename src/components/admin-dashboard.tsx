@@ -32,6 +32,11 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     const [adminInput, setAdminInput] = useState("");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+    // Log state changes for debugging
+    useEffect(() => {
+        console.log("🟡 [STATE] pendingDesign changed:", pendingDesign);
+    }, [pendingDesign]);
+
     const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     // Initial Load
@@ -315,6 +320,12 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                         >
                             <Wand2 className="w-4 h-4" />
                             Generate Design
+                        </button>
+                        <button
+                            onClick={handleTestFlow}
+                            className="bg-red-600 text-white px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-red-500 transition-colors"
+                        >
+                            TEST FLOW
                         </button>
                     </div>
                     <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
