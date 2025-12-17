@@ -26,7 +26,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
                 response_format: "b64_json"
             });
 
-            if (response.data[0].b64_json) {
+            if (response.data?.[0]?.b64_json) {
                 console.log("[SERVER] Successfully generated image with OpenAI DALL-E 3");
                 return {
                     success: true,
@@ -89,24 +89,6 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             isMock: true,
             error: String(error)
         };
-    }
-}
-
-export async function listAvailableModels() {
-    console.log("🔍 [SERVER] Listing available models...");
-    try {
-        const apiKey = process.env.GOOGLE_API_KEY;
-        if (!apiKey) return { error: "No API Key" };
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const data = await response.json();
-
-        const names = data.models?.map((m: any) => m.name) || [];
-        console.log("🔍 [SERVER] Models available (NAMES ONLY):", JSON.stringify(names, null, 2));
-        return names;
-    } catch (error) {
-        console.error("🔍 [SERVER] Failed to list models:", error);
-        return { error: String(error) };
     }
 }
 
