@@ -175,16 +175,22 @@ Describe your vision, and you'll receive your file! 🍫`
         const finalPrompt = attachments.length > 0 ? `[Attachments] ${prompt}` : prompt;
 
         try {
+            console.log("🎨 Triggering AI Design Generation for:", finalPrompt);
             const result = await generatePackagingDesign(finalPrompt);
+            console.log("🎨 AI Result:", result);
             if (result.success && result.imageUrl) {
+                console.log("✅ Updating pendingDesign in session:", sessionId);
                 await StorageService.updateSessionPendingDesign(sessionId, {
                     originalPrompt: finalPrompt,
                     imageUrl: result.imageUrl,
                     status: 'generated'
                 });
+                console.log("✅ PendingDesign updated successfully");
+            } else {
+                console.warn("⚠️ AI returned success but no imageUrl", result);
             }
         } catch (aiError) {
-            console.error("AI Generation Failed (non-critical):", aiError);
+            console.error("❌ AI Generation Failed (non-critical):", aiError);
             // Silent fail - user's message was already sent successfully
         }
     };
@@ -221,11 +227,13 @@ Describe your vision, and you'll receive your file! 🍫`
             </header>
 
             <div className="flex-1 relative">
-                <ChatInterface
-                    messages={messages}
-                    onSendMessage={handleSendMessage}
-                    onExit={!isAdminMode ? handleExit : undefined}
-                />
+                {!isAdminMode && (
+                    <ChatInterface
+                        messages={messages}
+                        onSendMessage={handleSendMessage}
+                        onExit={handleExit}
+                    />
+                )}
 
                 {isAdminMode && (
                     <AdminDashboard

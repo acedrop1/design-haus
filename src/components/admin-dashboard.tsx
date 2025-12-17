@@ -201,7 +201,7 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                 </div>
 
                 {/* Chat History (New Improved View) */}
-                <div className="absolute inset-0 pt-20 pb-20 px-4 md:px-8 overflow-y-auto">
+                <div className="absolute inset-0 pt-20 pb-20 px-4 md:px-8 overflow-y-auto" style={{ willChange: 'transform' }}>
                     <div className="max-w-4xl mx-auto space-y-4">
                         {selectedSessionId ? (
                             activeMessages.length > 0 ? (
@@ -247,7 +247,7 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
                 {/* Staging Area (Original Sidebar Overlay Style) */}
                 {pendingDesign && (
-                    <div className="absolute top-20 right-8 w-96 bg-zinc-900/95 backdrop-blur-md border border-[var(--accent-yellow)]/30 rounded-xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col z-20">
+                    <div className="absolute top-20 right-8 w-96 bg-zinc-900/95 backdrop-blur-md border border-[var(--accent-yellow)]/30 rounded-xl shadow-2xl overflow-hidden flex flex-col z-30">
                         <div className="p-3 bg-black border-b border-zinc-800 flex justify-between items-center">
                             <h3 className="text-white text-sm font-bold uppercase flex items-center gap-2">
                                 <Wand2 className="w-4 h-4 text-[var(--accent-yellow)]" /> Staging Area
@@ -287,8 +287,8 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                 )}
 
                 {/* Floating Input Bar (New feature kept) */}
-                <div className="absolute bottom-6 left-0 right-0 px-4 md:px-0 flex justify-center pointer-events-none z-30">
-                    <div className="w-full max-w-2xl bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl p-2 flex gap-2 pointer-events-auto">
+                <div className="absolute bottom-6 left-0 right-0 px-4 md:px-0 flex justify-center z-40">
+                    <div className="w-full max-w-2xl bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl p-2 flex gap-2">
                         <button className="p-3 text-zinc-500 hover:text-white transition-colors">
                             <ImageIcon className="w-5 h-5" />
                         </button>
