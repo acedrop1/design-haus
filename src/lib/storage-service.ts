@@ -194,15 +194,24 @@ export const StorageService = {
             };
         }
 
+
         // Firebase
         try {
-            return onSnapshot(doc(db, "sessions", sessionId), (doc) => {
-                if (doc.exists()) callback(doc.data());
-            });
+            return onSnapshot(
+                doc(db, "sessions", sessionId),
+                { includeMetadataChanges: false }, // Only trigger on server changes, not cache
+                (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.data();
+                        console.log("[STORAGE] Session snapshot received, from cache?", snapshot.metadata.fromCache);
+                        console.log("[STORAGE] Session data:", data);
+                        callback(data);
+                    }
+                }
+            );
         } catch (e) {
             console.error("Firebase Listen Failed (Session)", e);
             USE_FALLBACK = true;
-            // Return empty unsub (we can't easily restart the mock listener here without a reload, but writes will work)
             return () => { };
         }
     },
