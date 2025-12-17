@@ -23,7 +23,7 @@ export function LandingPage({ onStart, onAdminLogin }: LandingPageProps) {
             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,0,0.05),transparent_70%)]" />
 
             {/* Hero Content */}
-            <div className="z-10 text-center space-y-8 max-w-4xl px-4">
+            <div className="z-50 text-center space-y-8 max-w-4xl px-4 relative">
                 <div
                     onClick={handleLogoClick}
                     className="cursor-default select-none transition-transform hover:scale-105 active:scale-95 duration-500"

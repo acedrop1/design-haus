@@ -73,6 +73,10 @@ export function MainLayout() {
     }, [sessionId]);
 
     const handleStart = async () => {
+        // Optimistic UI: Switch immediately so the user sees progress
+        // This makes the button feel "instant" even if DB is slow
+        setHasStarted(true);
+
         try {
             let currentSessionId = sessionId;
 
@@ -83,8 +87,6 @@ export function MainLayout() {
                 setSessionId(currentSessionId);
                 localStorage.setItem("designhaus_session_id", currentSessionId);
             }
-
-            setHasStarted(true);
 
             // Add intro message FIRST, then mark as started
             // This guarantees ordering
@@ -108,7 +110,7 @@ Describe your vision, and you'll receive your file! 🍫`
             // Fallback: If DB fails, just let them in locally so they aren't blocked
             // but show an alert so we know.
             alert(`Connection Error: ${error.message || "Unknown"}. Falling back to offline mode.`);
-            setHasStarted(true); // Let them in anyway
+            // We already set hasStarted(true) at the top, so they are already in.
         }
     };
 
