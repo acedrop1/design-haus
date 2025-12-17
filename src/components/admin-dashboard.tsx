@@ -194,6 +194,44 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         }
     };
 
+    const handleTestFlow = async () => {
+        console.log("🧪 [TEST] Starting diagnostic test...");
+        console.log("🧪 [TEST] Step 1: Check selectedSessionId:", selectedSessionId);
+
+        if (!selectedSessionId) {
+            alert("No session selected!");
+            return;
+        }
+
+        console.log("🧪 [TEST] Step 2: Check activeMessages:", activeMessages.length);
+        console.log("🧪 [TEST] Step 3: Current pendingDesign state:", pendingDesign);
+
+        const testDesign = {
+            originalPrompt: "TEST DIAGNOSTIC",
+            imageUrl: "https://via.placeholder.com/400x500/FF0000/FFFFFF?text=TEST",
+            status: 'generated' as const
+        };
+
+        console.log("🧪 [TEST] Step 4: Calling updateSessionPendingDesign with:", testDesign);
+
+        try {
+            await StorageService.updateSessionPendingDesign(selectedSessionId, testDesign);
+            console.log("✅ [TEST] updateSessionPendingDesign completed");
+            console.log("🧪 [TEST] Step 5: Waiting 2 seconds for listener...");
+
+            setTimeout(() => {
+                console.log("🧪 [TEST] Step 6: Current pendingDesign state after update:", pendingDesign);
+                if (pendingDesign?.imageUrl) {
+                    console.log("✅✅✅ [TEST] SUCCESS! pendingDesign is set in state");
+                } else {
+                    console.log("❌❌❌ [TEST] FAILED! pendingDesign NOT in state after 2s");
+                }
+            }, 2000);
+        } catch (error) {
+            console.error("❌ [TEST] updateSessionPendingDesign failed:", error);
+        }
+    };
+
     const handleRefine = async () => {
         if (!selectedSessionId || !pendingDesign) return;
         await StorageService.updateSessionPendingDesign(selectedSessionId, {
