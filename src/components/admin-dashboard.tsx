@@ -35,6 +35,8 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     // Log state changes for debugging
     useEffect(() => {
         console.log("🟡 [STATE] pendingDesign changed:", pendingDesign);
+        console.log("🟡 [STATE] Will render staging area?", !!pendingDesign);
+        console.log("🟡 [STATE] pendingDesign.imageUrl?", pendingDesign?.imageUrl);
     }, [pendingDesign]);
 
     const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
