@@ -137,13 +137,7 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false, onE
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pt-12">
 
                 {/* Warning if no messages (should be covered by Self-Healing logic now, but just in case) */}
-                {messages.length === 0 && (
-                    <div className="h-full flex items-center justify-center text-zinc-500 text-xs uppercase tracking-widest animate-pulse">
-                        Connecting to DesignHaus...
-                    </div>
-                )}
-
-                {messages.map((message) => (
+                {/* REMOVED blocking loader. If empty, just show empty or let main layout handle injection */}            {messages.map((message) => (
                     <div
                         key={message.id}
                         className={cn(

@@ -62,7 +62,9 @@ export function MainLayout() {
                 const introKey = `intro_sent_${sessionId}`;
                 if (!localStorage.getItem(introKey)) {
                     localStorage.setItem(introKey, "true");
-                    StorageService.addMessage(sessionId, {
+
+                    const introMsg: any = {
+                        id: "intro-temp-" + Date.now(),
                         role: 'ai',
                         content: `Welcome to DesignHaus! 🍬
 
@@ -73,8 +75,15 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 2. Attach your **Logo** or brand name (if you have one).
 3. Send your **Instagram @handle** so we can create a QR code on the design.
 
-Describe your vision, and you'll receive your file! 🍫`
-                    });
+Describe your vision, and you'll receive your file! 🍫`,
+                        timestamp: new Date()
+                    };
+
+                    // 1. Show it INSTANTLY (Optimistic)
+                    setMessages([introMsg]);
+
+                    // 2. Write it to DB (Background)
+                    StorageService.addMessage(sessionId, introMsg);
                 }
             }
         });
