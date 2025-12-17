@@ -12,6 +12,7 @@ import {
     getDoc,
     getDocs
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // --- Mock Data Structure for LocalStorage ---
 // Key: "designhaus_db"
@@ -306,5 +307,23 @@ export const StorageService = {
 
             callback(sorted);
         });
+    },
+
+    // --- Assets (Storage) ---
+    async uploadImage(blob: Blob, path: string): Promise<string> {
+        if (USE_MOCK || USE_FALLBACK) {
+            // Mock: Just return a themed placeholder or the blob as object URL
+            return URL.createObjectURL(blob);
+        }
+
+        try {
+            const storageRef = ref(storage, path);
+            const snapshot = await uploadBytes(storageRef, blob);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+            return downloadURL;
+        } catch (error) {
+            console.error("[STORAGE] Firebase Upload Failed:", error);
+            throw error;
+        }
     }
 };

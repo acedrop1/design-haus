@@ -32,6 +32,60 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     const [adminInput, setAdminInput] = useState("");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+    const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+    // Helper function to upload base64 images to Firebase Storage
+    const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
+        try {
+            console.log("📤 [ADMIN] Converting base64 to blob...");
+            const blob = await fetch(base64Data).then(res => res.blob());
+
+            console.log("📤 [ADMIN] Uploading to Firebase Storage:", path);
+            const url = await StorageService.uploadImage(blob, path);
+            return url;
+        } catch (error) {
+            console.error("[ADMIN] Failed to upload base64 image:", error);
+            return null;
+        }
+    };
+
+    // Unified design generation and saving logic
+    const handleDesignWorkflow = async (prompt: string) => {
+        if (!selectedSessionId) return;
+
+        console.log("🎨 [ADMIN] Starting design workflow for:", prompt);
+
+        try {
+            const result = await generatePackagingDesign(prompt);
+            console.log("🎨 [ADMIN] Generation result:", result);
+
+            if (result.success && result.imageUrl) {
+                let finalImageUrl = result.imageUrl;
+
+                // If it's a base64 from AI, we MUST upload it to Storage to avoid Firestore limits
+                if (result.imageUrl.startsWith('data:')) {
+                    console.log("📤 [ADMIN] AI Image detected, uploading to Storage...");
+                    const uploadedUrl = await uploadBase64Image(result.imageUrl, `designs/${selectedSessionId}/${Date.now()}.png`);
+                    if (uploadedUrl) {
+                        finalImageUrl = uploadedUrl;
+                    } else {
+                        console.error("❌ [ADMIN] Storage upload failed");
+                    }
+                }
+
+                await StorageService.updateSessionPendingDesign(selectedSessionId, {
+                    originalPrompt: prompt,
+                    imageUrl: finalImageUrl,
+                    status: 'generated'
+                });
+                console.log("✅ [ADMIN] Design saved and updated!");
+            }
+        } catch (error) {
+            console.error("❌ [ADMIN] Design Workflow Failed:", error);
+            alert("Failed to generate/save design: " + (error as Error).message);
+        }
+    };
+
     // Log state changes can be removed or reduced to errors only
     useEffect(() => {
         if (pendingDesign) {
@@ -40,8 +94,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         // Debug: Check available models
         listAvailableModels().then(res => console.log("🔍 [ADMIN] Available Models:", res));
     }, [pendingDesign]);
-
-    const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     // Initial Load
     useEffect(() => {
@@ -124,44 +176,12 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         }
 
         console.log("✅ [ADMIN] Conditions met, will auto-generate from:", lastClientMessage.content);
-
-        // Auto-generate design from last client message
-        const generateDesign = async () => {
-            console.log("🎨 [ADMIN] Auto-generating design for client message:", lastClientMessage.content);
-
-            try {
-                const result = await generatePackagingDesign(lastClientMessage.content);
-                console.log("🎨 [ADMIN] AI Result:", result);
-
-                if (result.success && result.imageUrl) {
-                    console.log("✅ [ADMIN] Updating pendingDesign in session:", selectedSessionId);
-                    await StorageService.updateSessionPendingDesign(selectedSessionId, {
-                        originalPrompt: lastClientMessage.content,
-                        imageUrl: result.imageUrl,
-                        status: 'generated'
-                    });
-                    console.log("✅ [ADMIN] PendingDesign updated - should appear in staging area");
-                } else {
-                    console.warn("⚠️ [ADMIN] AI returned success but no imageUrl", result);
-                }
-            } catch (error) {
-                console.error("❌ [ADMIN] AI Generation Failed:", error);
-            }
-        };
-
-        generateDesign();
+        handleDesignWorkflow(lastClientMessage.content);
     }, [selectedSessionId, activeMessages, pendingDesign]);
-
-    // Helper function to upload base64 images to Firebase Storage
-    const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
-        // For now, just return the base64 data directly
-        // Firebase Storage upload can be added later if needed
-        return base64Data;
-    };
 
     // Actions
     const handleGenerateDesign = async () => {
-        console.log("🔴 [ADMIN] handleGenerateDesign CALLED");
+        console.log("🔴 [ADMIN] manual handleGenerateDesign CALLED");
 
         if (!selectedSessionId || !activeMessages.length) {
             console.log("❌ [ADMIN] Early return - no session or messages");
@@ -177,25 +197,7 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             return;
         }
 
-        console.log("🎨 [ADMIN] Generating design for:", lastClientMessage.content);
-
-        try {
-            const result = await generatePackagingDesign(lastClientMessage.content);
-            console.log("✅ [ADMIN] Generation result:", result);
-
-            if (result.success && result.imageUrl) {
-                // Use the image URL directly (base64 or external URL)
-                await StorageService.updateSessionPendingDesign(selectedSessionId, {
-                    originalPrompt: lastClientMessage.content,
-                    imageUrl: result.imageUrl,
-                    status: 'generated'
-                });
-                console.log("✅✅✅ [ADMIN] Design saved!");
-            }
-        } catch (error) {
-            console.error("❌ [ADMIN] Critical Failure:", error);
-            alert("Failed to generate design");
-        }
+        await handleDesignWorkflow(lastClientMessage.content);
     };
 
     const handleRefine = async () => {
