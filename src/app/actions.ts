@@ -96,3 +96,20 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
         };
     }
 }
+
+export async function listAvailableModels() {
+    console.log("🔍 [SERVER] Listing available models...");
+    try {
+        const apiKey = process.env.GOOGLE_API_KEY;
+        if (!apiKey) return { error: "No API Key" };
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const data = await response.json();
+
+        console.log("🔍 [SERVER] Models available:", data.models?.map((m: any) => m.name));
+        return data;
+    } catch (error) {
+        console.error("🔍 [SERVER] Failed to list models:", error);
+        return { error: String(error) };
+    }
+}

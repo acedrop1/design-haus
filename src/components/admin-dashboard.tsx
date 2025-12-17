@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { generatePackagingDesign } from "@/app/actions";
+import { generatePackagingDesign, listAvailableModels } from "@/app/actions";
 import {
     Loader2, Send, Wand2, RefreshCcw, Lock, Unlock,
     MessageSquare, ChevronLeft, Image as ImageIcon,
@@ -37,6 +37,8 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         if (pendingDesign) {
             console.log("🟡 [STATE] pendingDesign updated:", pendingDesign.status);
         }
+        // Debug: Check available models
+        listAvailableModels().then(res => console.log("🔍 [ADMIN] Available Models:", res));
     }, [pendingDesign]);
 
     const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
