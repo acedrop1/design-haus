@@ -9,62 +9,41 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
     console.log("🎨 [SERVER] generatePackagingDesign called with prompt:", prompt);
 
     // Enhanced prompt for packaging results
-    const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. 
-    Style: Modern, sleek, industrial aesthetic, bold typography. 
-    Object: Physical product box or pouch on a clean background. 
-    Lighting: Studio lighting, 4k, photorealistic, professional product shot.`;
+    const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. Modern, sleek, industrial aesthetic, bold typography. Physical product box or pouch on clean background. Studio lighting, 4k, photorealistic, professional product shot.`;
 
     try {
-        const apiKey = process.env.GOOGLE_API_KEY;
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+        // Try Stability AI (simple API key, works great!)
+        const stabilityKey = process.env.STABILITY_API_KEY;
 
-        if (!apiKey) {
-            console.warn("[SERVER] No GOOGLE_API_KEY found, using fallback");
-            return {
-                success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
-                isMock: true
-            };
-        }
+        if (stabilityKey) {
+            console.log("[SERVER] Using Stability AI (Stable Diffusion 3.5)");
 
-        // Try direct Imagen API (works with API key)
-        if (projectId) {
-            console.log("[SERVER] Trying Vertex AI Imagen via REST API");
-
-            const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict`;
-
-            const response = await fetch(url, {
+            const response = await fetch("https://api.stability.ai/v2beta/stable-image/generate/sd3", {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${apiKey}`,
-                    "Content-Type": "application/json"
+                    "Authorization": `Bearer ${stabilityKey}`,
+                    "Accept": "image/*"
                 },
-                body: JSON.stringify({
-                    instances: [{
-                        prompt: enhancedPrompt
-                    }],
-                    parameters: {
-                        sampleCount: 1,
-                        aspectRatio: "4:5",
-                        safetyFilterLevel: "block_some",
-                        personGeneration: "allow_adult"
-                    }
+                body: new URLSearchParams({
+                    prompt: enhancedPrompt,
+                    output_format: "png",
+                    aspect_ratio: "4:5",
+                    model: "sd3.5-large"
                 })
             });
 
             if (response.ok) {
-                const data = await response.json();
-                if (data.predictions && data.predictions[0]?.bytesBase64Encoded) {
-                    console.log("[SERVER] Successfully generated image with Imagen 3");
-                    return {
-                        success: true,
-                        imageUrl: `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`,
-                        isMock: false
-                    };
-                }
+                const imageBlob = await response.arrayBuffer();
+                const base64 = Buffer.from(imageBlob).toString('base64');
+                console.log("[SERVER] Successfully generated image with Stability AI");
+                return {
+                    success: true,
+                    imageUrl: `data:image/png;base64,${base64}`,
+                    isMock: false
+                };
             } else {
                 const errorText = await response.text();
-                console.warn("[SERVER] Imagen API error:", response.status, errorText);
+                console.warn("[SERVER] Stability AI error:", response.status, errorText);
             }
         }
 
