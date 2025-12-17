@@ -28,23 +28,19 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
         Object: Physical product box or pouch. 
         Lighting: Studio lighting, 4k, photorealistic.`;
 
-        // Using Imagen 4.0 (Found in user's logs at index 41)
-        const modelId = "imagen-4.0-generate-preview-06-06";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:predict?key=${apiKey}`;
+        // Using Gemini 2.5 Flash (as requested and available)
+        const modelId = "gemini-2.5-flash";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
 
-        console.log(`[SERVER] Calling Imagen Model: ${modelId}`);
+        console.log(`[SERVER] Calling Gemini Model: ${modelId}`);
 
-        // Imagen Payload
+        // Gemini Payload
         const payload = {
-            instances: [
-                {
-                    prompt: enhancedPrompt
-                }
-            ],
-            parameters: {
-                sampleCount: 1,
-                aspectRatio: "4:5"
-            }
+            contents: [{
+                parts: [{
+                    text: `Generate a photorealistic image of high quality product packaging. ${enhancedPrompt}`
+                }]
+            }]
         };
 
         const response = await fetch(url, {
@@ -66,22 +62,28 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
 
         const data = await response.json();
 
-        // Check for Imagen Response
-        if (data.predictions && data.predictions[0] && data.predictions[0].bytesBase64Encoded) {
-            const base64Image = data.predictions[0].bytesBase64Encoded;
+        // Check for Gemini Response (Inline Data)
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.mimeType.startsWith("image"));
+        const textPart = parts.find((p: any) => p.text);
+
+        if (imagePart) {
+            const base64Image = imagePart.inlineData.data;
             console.log(`[SERVER] Successfully generated image with ${modelId}`);
             return {
                 success: true,
-                imageUrl: `data:image/png;base64,${base64Image}`,
+                imageUrl: `data:${imagePart.inlineData.mimeType};base64,${base64Image}`,
                 isMock: false
             };
         } else {
-            console.warn("[SERVER] Unexpected API response structure:", JSON.stringify(data));
+            console.warn("[SERVER] No image in response. Text content:", textPart?.text || "None");
+            console.log("[SERVER] Full response:", JSON.stringify(data).slice(0, 500));
+
             return {
                 success: true,
                 imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
                 isMock: true,
-                error: "Invalid API response structure"
+                error: textPart?.text ? `AI Refusal: ${textPart.text}` : "No image generated"
             };
         }
 
