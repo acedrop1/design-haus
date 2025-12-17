@@ -132,13 +132,11 @@ Describe your vision, and you'll receive your file! 🍫`
     };
 
     const handleAdminLogin = () => {
-        // Admin Login Logic...
-        // Note: For localhost demo, we allow easy switching
         const password = window.prompt("Enter Admin Password:");
         if (password === "adam123") {
             setIsAdminMode(true);
             setIsSidebarOpen(true);
-        } else {
+        } else if (password) {
             alert("Access Denied");
         }
     };
@@ -155,7 +153,11 @@ Describe your vision, and you'll receive your file! 🍫`
                 </div>
                 <div className="flex gap-4">
                     {!isAdminMode && (
-                        <button onClick={handleAdminLogin} className="w-2 h-2 rounded-full bg-zinc-900 hover:bg-[var(--accent-yellow)] transition-colors" />
+                        <button
+                            onClick={handleAdminLogin}
+                            className="w-2 h-2 rounded-full bg-zinc-900 hover:bg-[var(--accent-yellow)] transition-colors"
+                            title="Admin Access"
+                        />
                     )}
                 </div>
             </header>
