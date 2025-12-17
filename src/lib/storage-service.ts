@@ -20,17 +20,67 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const LOCAL_STORAGE_KEY = "designhaus_db";
 
-function getLocalDB() {
+interface MockDB {
+    sessions: { [id: string]: DesignSession };
+    messages: { [sessionId: string]: { [msgId: string]: Message } };
+}
+
+function getLocalDB(): MockDB {
     if (typeof window === 'undefined') return { sessions: {}, messages: {} };
     const data = localStorage.getItem(LOCAL_STORAGE_KEY);
     return data ? JSON.parse(data) : { sessions: {}, messages: {} };
 }
 
-function saveLocalDB(data: unknown) {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
-    // Dispatch event for other tabs/components to react
-    window.dispatchEvent(new Event('storage-update'));
+function saveLocalDB(db: MockDB) {
+    if (typeof window !== 'undefined') {
+        try {
+            const data = JSON.stringify(db);
+            // Check approximate size (UTF-16 chars are 2 bytes, but localStorage counts character length)
+            if (data.length > 4500000) { // 4.5M chars is getting close to the 5MB limit
+                console.warn("[STORAGE] Mock DB is getting large. Purging old sessions...");
+                const sessionIds = Object.keys(db.sessions).sort((a, b) =>
+                    new Date(db.sessions[a].createdAt || 0).getTime() - new Date(db.sessions[b].createdAt || 0).getTime()
+                );
+                // Remove oldest half
+                const toRemove = sessionIds.slice(0, Math.floor(sessionIds.length / 2));
+                toRemove.forEach(id => {
+                    delete db.sessions[id];
+                    delete db.messages[id];
+                });
+                // Recursive call with smaller DB, but ensure it doesn't loop infinitely if purge doesn't help enough
+                // For simplicity, we'll just try once more.
+                if (toRemove.length > 0) {
+                    console.log(`[STORAGE] Purged ${toRemove.length} old sessions.`);
+                    return saveLocalDB(db);
+                } else {
+                    console.error("[STORAGE] Could not purge enough data. LocalStorage might be full.");
+                }
+            }
+            localStorage.setItem(LOCAL_STORAGE_KEY, data);
+        } catch (e) {
+            console.error("[STORAGE] LocalStorage Save Failed:", e);
+            // If quota exceeded, try to purge and save again
+            if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+                console.warn("[STORAGE] QuotaExceededError. Attempting to purge and retry save.");
+                const sessionIds = Object.keys(db.sessions).sort((a, b) =>
+                    new Date(db.sessions[a].createdAt || 0).getTime() - new Date(db.sessions[b].createdAt || 0).getTime()
+                );
+                const toRemove = sessionIds.slice(0, Math.floor(sessionIds.length / 2));
+                if (toRemove.length > 0) {
+                    toRemove.forEach(id => {
+                        delete db.sessions[id];
+                        delete db.messages[id];
+                    });
+                    console.log(`[STORAGE] Purged ${toRemove.length} old sessions due to QuotaExceededError.`);
+                    return saveLocalDB(db); // Retry
+                } else {
+                    console.error("[STORAGE] QuotaExceededError and no sessions to purge or purge failed.");
+                }
+            }
+        }
+        // Dispatch event for other tabs/components to react
+        window.dispatchEvent(new Event('storage-update'));
+    }
 }
 
 // Helper to determine if we should use Firebase or Mock

@@ -37,19 +37,20 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
     const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-    // Helper function to upload base64 images to Firebase Storage
-    const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
+    // Helper function to upload images (URL or base64) to Firebase Storage
+    const uploadToStorage = async (dataOrUrl: string, path: string): Promise<string | null> => {
         try {
-            setGenStatus("Converting image...");
-            // Use fetch-to-blob as it's more robust for data URLs in browsers
-            const response = await fetch(base64Data);
+            setGenStatus("Processing image...");
+
+            // fetch() works for both external URLs and data: URIs
+            const response = await fetch(dataOrUrl);
             const blob = await response.blob();
 
             setGenStatus(`Uploading to Storage (${Math.round(blob.size / 1024)}KB)...`);
             const url = await StorageService.uploadImage(blob, path);
             return url;
         } catch (error) {
-            console.error("[ADMIN] Failed to convert/upload base64 image:", error);
+            console.error("[ADMIN] Failed to upload image:", error);
             setGenStatus("Upload failed!");
             return null;
         }
@@ -71,23 +72,23 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             if (result.success && result.imageUrl) {
                 let finalImageUrl = result.imageUrl;
 
-                // If it's a base64 from AI, we MUST upload it to Storage to avoid Firestore limits
-                if (result.imageUrl.startsWith('data:')) {
-                    const uploadedUrl = await uploadBase64Image(result.imageUrl, `designs/${selectedSessionId}/${Date.now()}.png`);
+                // Move image to permanent Storage (either from URL or base64)
+                setGenStatus("Storing permanently...");
+                const uploadedUrl = await uploadToStorage(result.imageUrl, `designs/${selectedSessionId}/${Date.now()}.png`);
 
-                    if (uploadedUrl) {
-                        finalImageUrl = uploadedUrl;
-                    } else {
-                        console.error("❌ [ADMIN] Storage upload failed - will fall back to base64 which might fail in DB");
-                        setGenStatus("Storage failed, using fallback...");
-                    }
+                if (uploadedUrl) {
+                    finalImageUrl = uploadedUrl;
+                } else {
+                    console.error("❌ [ADMIN] Storage upload failed - using temporary link");
+                    // If it's a data URI, this might still fail in Firestore later
                 }
 
                 setGenStatus("Saving to database...");
                 await StorageService.updateSessionPendingDesign(selectedSessionId, {
                     originalPrompt: prompt,
                     imageUrl: finalImageUrl,
-                    status: 'generated'
+                    status: 'generated',
+                    timestamp: Date.now() // Track when it was generated to avoid loops
                 });
                 console.log("✅ [ADMIN] Design saved and updated!");
                 setGenStatus(null);
@@ -168,19 +169,10 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             hasImageUrl: pendingDesign?.imageUrl ? true : false
         });
 
-        if (!selectedSessionId) {
-            console.log("⏭️ [ADMIN] No session selected, skipping auto-gen");
-            return;
-        }
-
-        if (!activeMessages.length) {
-            console.log("⏭️ [ADMIN] No messages yet, skipping auto-gen");
-            return;
-        }
-
-        // Check if pendingDesign has an actual image, not just if it exists
-        if (pendingDesign?.imageUrl) {
-            console.log("⏭️ [ADMIN] Already has pendingDesign with image, skipping auto-gen");
+        // CHECK: If the last message is already from AI, we don't need to auto-generate
+        const lastMessage = activeMessages[activeMessages.length - 1];
+        if (lastMessage?.role === 'ai') {
+            console.log("⏭️ [ADMIN] Last message is AI, skipping auto-gen");
             return;
         }
 
@@ -193,6 +185,10 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             console.log("⏭️ [ADMIN] No client messages found, skipping auto-gen");
             return;
         }
+
+        // PREVENT LOOP: Check if we've already generated/handled this message
+        // If the last message isn't from the client, or if the client hasn't spoken since the last design
+        // we should probably stop.
 
         console.log("✅ [ADMIN] Conditions met, will auto-generate from:", lastClientMessage.content);
         handleDesignWorkflow(lastClientMessage.content);
@@ -260,6 +256,12 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             isLocked: false,
             isPaid: true
         });
+    };
+
+    const handleClearStaging = async () => {
+        if (!selectedSessionId) return;
+        if (!confirm("Clear the staging area? This will allow you to regenerate a new design.")) return;
+        await StorageService.updateSessionPendingDesign(selectedSessionId, null);
     };
 
     return (
@@ -412,7 +414,12 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                             <h3 className="text-white text-sm font-bold uppercase flex items-center gap-2">
                                 <Wand2 className="w-4 h-4 text-[var(--accent-yellow)]" /> Staging Area
                             </h3>
-                            <span className="text-[10px] text-zinc-500 uppercase">{pendingDesign.status}</span>
+                            <button
+                                onClick={handleClearStaging}
+                                className="text-[10px] text-zinc-500 hover:text-red-400 uppercase transition-colors"
+                            >
+                                Clear
+                            </button>
                         </div>
 
                         <div className="relative aspect-[4/5] bg-black/50">

@@ -23,14 +23,14 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
                 n: 1,
                 size: "1024x1024",
                 quality: "standard",
-                response_format: "b64_json"
+                response_format: "url"
             });
 
-            if (response.data?.[0]?.b64_json) {
-                console.log("[SERVER] Successfully generated image with OpenAI DALL-E 3");
+            if (response.data?.[0]?.url) {
+                console.log("[SERVER] Successfully generated image URL with OpenAI DALL-E 3");
                 return {
                     success: true,
-                    imageUrl: `data:image/png;base64,${response.data[0].b64_json}`,
+                    imageUrl: response.data[0].url,
                     isMock: false
                 };
             }
