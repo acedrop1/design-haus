@@ -78,15 +78,38 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
     // Auto-generate design when admin views session with new client messages
     useEffect(() => {
-        if (!selectedSessionId || !activeMessages.length) return;
-        if (pendingDesign) return; // Already has a design
+        console.log("🔍 [ADMIN] Auto-gen check:", {
+            selectedSessionId,
+            messageCount: activeMessages.length,
+            hasPendingDesign: !!pendingDesign
+        });
+
+        if (!selectedSessionId) {
+            console.log("⏭️ [ADMIN] No session selected, skipping auto-gen");
+            return;
+        }
+
+        if (!activeMessages.length) {
+            console.log("⏭️ [ADMIN] No messages yet, skipping auto-gen");
+            return;
+        }
+
+        if (pendingDesign) {
+            console.log("⏭️ [ADMIN] Already has pendingDesign, skipping auto-gen");
+            return;
+        }
 
         // Find the last client message
         const lastClientMessage = [...activeMessages]
             .reverse()
             .find(msg => msg.role === 'user');
 
-        if (!lastClientMessage) return;
+        if (!lastClientMessage) {
+            console.log("⏭️ [ADMIN] No client messages found, skipping auto-gen");
+            return;
+        }
+
+        console.log("✅ [ADMIN] Conditions met, will auto-generate from:", lastClientMessage.content);
 
         // Auto-generate design from last client message
         const generateDesign = async () => {
