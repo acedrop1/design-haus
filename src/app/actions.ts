@@ -15,96 +15,114 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
     Lighting: Studio lighting, 4k, photorealistic, professional product shot.`;
 
     try {
-        const replicateKey = process.env.REPLICATE_API_TOKEN;
+        const apiKey = process.env.GOOGLE_API_KEY;
 
-        if (replicateKey) {
-            console.log("[SERVER] Using Replicate FLUX model for image generation");
-
-            const response = await fetch("https://api.replicate.com/v1/predictions", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${replicateKey}`,
-                    "Content-Type": "application/json",
-                    "Prefer": "wait"
-                },
-                body: JSON.stringify({
-                    version: "black-forest-labs/flux-schnell",
-                    input: {
-                        prompt: enhancedPrompt,
-                        aspect_ratio: "4:5",
-                        output_format: "png",
-                        output_quality: 90
-                    }
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.output && data.output[0]) {
-                    console.log("[SERVER] Successfully generated image with FLUX");
-                    return {
-                        success: true,
-                        imageUrl: data.output[0],
-                        isMock: false
-                    };
-                }
-            } else {
-                console.warn("[SERVER] Replicate API failed:", response.status);
-            }
-        }
-
-        // Fallback: Try Google API if available
-        const googleKey = process.env.GOOGLE_API_KEY;
-        if (googleKey) {
-            console.log("[SERVER] Trying Google Gemini for text description");
-
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-            const result = await model.generateContent(
-                `You are a packaging design expert. Describe in vivid detail what a ${prompt} product packaging would look like. Focus on colors, typography, materials, and overall aesthetic. Be specific and visual.`
-            );
-
-            const description = result.response.text();
-            console.log("[SERVER] Generated description:", description.slice(0, 100));
-
-            // For now, return a curated stock image that matches the theme
-            const themeImages: Record<string, string> = {
-                "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
-                "coca": "https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800",
-                "holiday": "https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=800",
-                "default": "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800"
-            };
-
-            const lowerPrompt = prompt.toLowerCase();
-            let selectedImage = themeImages.default;
-
-            for (const [key, url] of Object.entries(themeImages)) {
-                if (lowerPrompt.includes(key)) {
-                    selectedImage = url;
-                    break;
-                }
-            }
-
+        if (!apiKey) {
+            console.warn("[SERVER] No GOOGLE_API_KEY found, using fallback");
             return {
                 success: true,
-                imageUrl: selectedImage,
-                isMock: true,
-                description
+                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
+                isMock: true
             };
         }
 
-        // Final fallback
-        console.warn("[SERVER] No API keys available, using fallback image");
+        // Try Vertex AI Imagen 3 (Google's official image generation)
+        console.log("[SERVER] Using Vertex AI Imagen 3");
+
+        const { VertexAI } = await import('@google-cloud/vertexai');
+
+        // Initialize Vertex AI with API key authentication
+        const vertexAI = new VertexAI({
+            project: process.env.GOOGLE_CLOUD_PROJECT || 'your-project-id',
+            location: 'us-central1',
+        });
+
+        const model = vertexAI.preview.getGenerativeModel({
+            model: 'imagen-3.0-generate-001',
+        });
+
+        const result = await model.generateContent({
+            contents: [{
+                role: 'user',
+                parts: [{
+                    text: enhancedPrompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.4,
+                topP: 0.95,
+                topK: 32,
+                maxOutputTokens: 2048,
+            }
+        });
+
+        const response = result.response;
+        const candidates = response.candidates;
+
+        if (candidates && candidates[0]) {
+            const parts = candidates[0].content.parts;
+            const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image'));
+
+            if (imagePart && imagePart.inlineData) {
+                console.log("[SERVER] Successfully generated image with Imagen 3");
+                return {
+                    success: true,
+                    imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
+                    isMock: false
+                };
+            }
+        }
+
+        // If Vertex AI fails, fall back to themed images
+        console.warn("[SERVER] Vertex AI didn't return image, using themed fallback");
+
+        const themeImages: Record<string, string> = {
+            "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
+            "coca": "https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800",
+            "holiday": "https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=800",
+            "default": "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800"
+        };
+
+        const lowerPrompt = prompt.toLowerCase();
+        let selectedImage = themeImages.default;
+
+        for (const [key, url] of Object.entries(themeImages)) {
+            if (lowerPrompt.includes(key)) {
+                selectedImage = url;
+                break;
+            }
+        }
+
         return {
             success: true,
-            imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
+            imageUrl: selectedImage,
             isMock: true
         };
 
     } catch (error) {
         console.error("[SERVER] Generation failed:", error);
+
+        // Smart fallback based on prompt
+        const themeImages: Record<string, string> = {
+            "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
+            "coca": "https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800",
+            "holiday": "https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=800",
+            "default": "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800"
+        };
+
+        const lowerPrompt = prompt.toLowerCase();
+        let selectedImage = themeImages.default;
+
+        for (const [key, url] of Object.entries(themeImages)) {
+            if (lowerPrompt.includes(key)) {
+                selectedImage = url;
+                break;
+            }
+        }
+
         return {
             success: true,
-            imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800",
+            imageUrl: selectedImage,
             isMock: true,
             error: String(error)
         };
