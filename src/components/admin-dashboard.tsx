@@ -31,39 +31,38 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     const [refineText, setRefineText] = useState("");
     const [adminInput, setAdminInput] = useState("");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [genStatus, setGenStatus] = useState<string | null>(null);
+    const isGeneratingRef = useRef(false);
 
     const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     // Helper function to upload base64 images to Firebase Storage
     const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
         try {
-            console.log("📤 [ADMIN] Converting base64 to blob...");
-            const arr = base64Data.split(',');
-            const mimeMatch = arr[0].match(/:(.*?);/);
-            const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-            const bstr = atob(arr[1]);
-            let n = bstr.length;
-            const u8arr = new Uint8Array(n);
-            while (n--) {
-                u8arr[n] = bstr.charCodeAt(n);
-            }
-            const blob = new Blob([u8arr], { type: mime });
+            setGenStatus("Converting image...");
+            // Use fetch-to-blob as it's more robust for data URLs in browsers
+            const response = await fetch(base64Data);
+            const blob = await response.blob();
 
-            console.log(`📤 [ADMIN] Uploading to Storage (${blob.size} bytes):`, path);
+            setGenStatus(`Uploading to Storage (${Math.round(blob.size / 1024)}KB)...`);
             const url = await StorageService.uploadImage(blob, path);
             return url;
         } catch (error) {
             console.error("[ADMIN] Failed to convert/upload base64 image:", error);
-            // Better to show the error in the console at least
+            setGenStatus("Upload failed!");
             return null;
         }
     };
 
     // Unified design generation and saving logic
     const handleDesignWorkflow = async (prompt: string) => {
-        if (!selectedSessionId) return;
+        if (!selectedSessionId || isGeneratingRef.current) return;
 
         console.log("🎨 [ADMIN] Starting design workflow for:", prompt);
+        setIsGenerating(true);
+        isGeneratingRef.current = true;
+        setGenStatus("AI is thinking...");
 
         try {
             const result = await generatePackagingDesign(prompt);
@@ -74,31 +73,35 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
                 // If it's a base64 from AI, we MUST upload it to Storage to avoid Firestore limits
                 if (result.imageUrl.startsWith('data:')) {
-                    console.log("📤 [ADMIN] AI Image detected, uploading to Storage...");
                     const uploadedUrl = await uploadBase64Image(result.imageUrl, `designs/${selectedSessionId}/${Date.now()}.png`);
 
                     if (uploadedUrl) {
                         finalImageUrl = uploadedUrl;
-                        console.log("✅ [ADMIN] Storage upload succeeded:", finalImageUrl);
                     } else {
                         console.error("❌ [ADMIN] Storage upload failed - will fall back to base64 which might fail in DB");
-                        // If it's too big, updateSessionPendingDesign will throw an error later.
+                        setGenStatus("Storage failed, using fallback...");
                     }
                 }
 
+                setGenStatus("Saving to database...");
                 await StorageService.updateSessionPendingDesign(selectedSessionId, {
                     originalPrompt: prompt,
                     imageUrl: finalImageUrl,
                     status: 'generated'
                 });
                 console.log("✅ [ADMIN] Design saved and updated!");
+                setGenStatus(null);
             } else {
                 throw new Error(result.error || "Generation failed without error message");
             }
         } catch (error) {
             console.error("❌ [ADMIN] Design Workflow Failed:", error);
             const msg = (error as any).message || String(error);
+            setGenStatus("Failure!");
             alert(`DESIGN ERROR: ${msg}\n\nPlease check console for technical details.`);
+        } finally {
+            setIsGenerating(false);
+            isGeneratingRef.current = false;
         }
     };
 
@@ -193,7 +196,7 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
         console.log("✅ [ADMIN] Conditions met, will auto-generate from:", lastClientMessage.content);
         handleDesignWorkflow(lastClientMessage.content);
-    }, [selectedSessionId, activeMessages, pendingDesign]);
+    }, [selectedSessionId, activeMessages, pendingDesign, isGenerating]);
 
     // Actions
     const handleGenerateDesign = async () => {
@@ -338,10 +341,18 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                         </button>
                         <button
                             onClick={handleGenerateDesign}
-                            className="bg-green-600 text-white px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-green-500 transition-colors flex items-center gap-2"
+                            disabled={isGenerating}
+                            className={cn(
+                                "text-white px-4 py-2 font-bold uppercase tracking-widest text-sm transition-colors flex items-center gap-2",
+                                isGenerating ? "bg-zinc-800 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"
+                            )}
                         >
-                            <Wand2 className="w-4 h-4" />
-                            Generate Design
+                            {isGenerating ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Wand2 className="w-4 h-4" />
+                            )}
+                            {isGenerating ? genStatus || "Generating..." : "Generate Design"}
                         </button>
                     </div>
                     <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
@@ -405,7 +416,22 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                         </div>
 
                         <div className="relative aspect-[4/5] bg-black/50">
-                            <img src={pendingDesign.imageUrl} className="w-full h-full object-contain" alt="Staged" />
+                            {isGenerating ? (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10 p-6 text-center">
+                                    <Loader2 className="w-10 h-10 text-[var(--accent-yellow)] animate-spin mb-4" />
+                                    <div className="text-[var(--accent-yellow)] font-bold uppercase tracking-widest text-xs">{genStatus}</div>
+                                    <div className="text-zinc-500 text-[10px] mt-2 italic px-4">DALL-E 3 is creating your high-res vision. Please don't refresh.</div>
+                                </div>
+                            ) : null}
+                            <img
+                                src={pendingDesign.imageUrl}
+                                className={cn("w-full h-full object-contain transition-opacity duration-500", isGenerating ? "opacity-30" : "opacity-100")}
+                                alt="Staged"
+                                onError={(e) => {
+                                    console.error("Image load failed, showing placeholder");
+                                    e.currentTarget.src = "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800";
+                                }}
+                            />
                         </div>
 
                         <div className="p-4 space-y-3">
