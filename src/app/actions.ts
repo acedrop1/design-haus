@@ -6,6 +6,21 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export async function generatePackagingDesign(prompt: string, base64Image?: string) {
+    console.log("🎨 [SERVER] generatePackagingDesign called with prompt:", prompt);
+
+    // TEMPORARY: Always use mock image to verify the flow works
+    // This ensures designs appear in staging area while we debug API issues
+    const mockImage = "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop";
+
+    console.log("🎨 [SERVER] Returning mock image for testing");
+
+    return {
+        success: true,
+        imageUrl: mockImage,
+        isMock: true
+    };
+
+    /* REAL API CODE - Temporarily disabled for debugging
     try {
         const apiKey = process.env.GOOGLE_API_KEY;
 
@@ -13,21 +28,18 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             console.warn("No GOOGLE_API_KEY found, using mock image");
             return {
                 success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+                imageUrl: mockImage,
                 isMock: true
             };
         }
 
         console.log("Generating design using Google API Key for prompt:", prompt);
 
-        // Enhanced prompt for packaging results
         const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. 
         Style: Modern, sleek, industrial aesthetic, bold typography. 
         Object: Physical product box or pouch. 
         Lighting: Studio lighting, 4k, photorealistic.`;
 
-        // Attempting to use the Imagen model via Generative Language API (beta)
-        // URL pattern for AI Studio keys targeting Imagen
         const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
 
         const response = await fetch(url, {
@@ -52,15 +64,13 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             const errText = await response.text();
             console.error("Google Image/Imagen API Error:", response.status, errText);
 
-            // Helpful logging for the user if their key doesn't have permissions
             if (response.status === 404 || response.status === 400) {
                 console.warn("Model likely not accessible with this API Key. Falling back to mock.");
             }
 
-            // FALLBACK TO MOCK so the app doesn't break
             return {
                 success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+                imageUrl: mockImage,
                 isMock: true,
                 error: `API Call Failed: ${response.status}`
             };
@@ -79,7 +89,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             console.warn("Unexpected API response structure:", data);
             return {
                 success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+                imageUrl: mockImage,
                 isMock: true,
                 error: "Invalid API response structure"
             };
@@ -89,9 +99,11 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
         console.error("Generation logic failed:", error);
         return {
             success: true,
-            imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+            imageUrl: mockImage,
             isMock: true,
             error: String(error)
         };
     }
+    */
 }
+
