@@ -38,13 +38,23 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
         try {
             console.log("📤 [ADMIN] Converting base64 to blob...");
-            const blob = await fetch(base64Data).then(res => res.blob());
+            const arr = base64Data.split(',');
+            const mimeMatch = arr[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            const blob = new Blob([u8arr], { type: mime });
 
-            console.log("📤 [ADMIN] Uploading to Firebase Storage:", path);
+            console.log(`📤 [ADMIN] Uploading to Storage (${blob.size} bytes):`, path);
             const url = await StorageService.uploadImage(blob, path);
             return url;
         } catch (error) {
-            console.error("[ADMIN] Failed to upload base64 image:", error);
+            console.error("[ADMIN] Failed to convert/upload base64 image:", error);
+            // Better to show the error in the console at least
             return null;
         }
     };
@@ -66,10 +76,13 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                 if (result.imageUrl.startsWith('data:')) {
                     console.log("📤 [ADMIN] AI Image detected, uploading to Storage...");
                     const uploadedUrl = await uploadBase64Image(result.imageUrl, `designs/${selectedSessionId}/${Date.now()}.png`);
+
                     if (uploadedUrl) {
                         finalImageUrl = uploadedUrl;
+                        console.log("✅ [ADMIN] Storage upload succeeded:", finalImageUrl);
                     } else {
-                        console.error("❌ [ADMIN] Storage upload failed");
+                        console.error("❌ [ADMIN] Storage upload failed - will fall back to base64 which might fail in DB");
+                        // If it's too big, updateSessionPendingDesign will throw an error later.
                     }
                 }
 
@@ -79,10 +92,13 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                     status: 'generated'
                 });
                 console.log("✅ [ADMIN] Design saved and updated!");
+            } else {
+                throw new Error(result.error || "Generation failed without error message");
             }
         } catch (error) {
             console.error("❌ [ADMIN] Design Workflow Failed:", error);
-            alert("Failed to generate/save design: " + (error as Error).message);
+            const msg = (error as any).message || String(error);
+            alert(`DESIGN ERROR: ${msg}\n\nPlease check console for technical details.`);
         }
     };
 

@@ -65,7 +65,18 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
     } catch (error) {
         console.error("[SERVER] Generation failed:", error);
 
-        // Smart fallback based on prompt
+        // If it was an actual API failure (not missing key), we should report it
+        const errorMsg = String(error);
+        if (errorMsg.includes("401") || errorMsg.includes("API key")) {
+            return {
+                success: false,
+                imageUrl: "",
+                isMock: false,
+                error: "DALL-E 3 Authentication fails. Please check OPENAI_API_KEY in Vercel."
+            };
+        }
+
+        // Smart fallback based on prompt if it wasn't a hard API error
         const themeImages: Record<string, string> = {
             "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
             "coca": "https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800",
@@ -87,7 +98,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             success: true,
             imageUrl: selectedImage,
             isMock: true,
-            error: String(error)
+            error: errorMsg
         };
     }
 }

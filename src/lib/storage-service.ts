@@ -111,7 +111,17 @@ export const StorageService = {
         await updateDoc(doc(db, "sessions", sessionId), { started: true });
     },
 
-    async updateSessionPendingDesign(sessionId: string, pendingDesign: unknown) {
+    async updateSessionPendingDesign(sessionId: string, pendingDesign: any) {
+        // Validation: Ensure we're not saving massive base64 strings to Firestore
+        if (pendingDesign && pendingDesign.imageUrl && pendingDesign.imageUrl.startsWith('data:') && pendingDesign.imageUrl.length > 500000) {
+            console.error("[STORAGE] Attempted to save a massive base64 image (>0.5MB) to Firestore. This will fail.");
+            // We should have uploaded this to Storage already.
+            // If we're here, it means upload failed.
+            if (!USE_MOCK && !USE_FALLBACK) {
+                throw new Error("Image too large for database. Storage upload must succeed.");
+            }
+        }
+
         if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             if (!db.sessions[sessionId]) {
@@ -312,17 +322,27 @@ export const StorageService = {
     // --- Assets (Storage) ---
     async uploadImage(blob: Blob, path: string): Promise<string> {
         if (USE_MOCK || USE_FALLBACK) {
-            // Mock: Just return a themed placeholder or the blob as object URL
-            return URL.createObjectURL(blob);
+            // CRITICAL: For mock/fallback, we keep the data in memory/local storage.
+            // Converting blob to base64 is safer for persistence than URL.createObjectURL
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
         }
 
         try {
             const storageRef = ref(storage, path);
-            const snapshot = await uploadBytes(storageRef, blob);
+            const snapshot = await uploadBytes(storageRef, blob, {
+                contentType: blob.type
+            });
             const downloadURL = await getDownloadURL(snapshot.ref);
+            console.log("[STORAGE] Image uploaded successfully:", downloadURL);
             return downloadURL;
         } catch (error) {
             console.error("[STORAGE] Firebase Upload Failed:", error);
+            // If real storage fails, we might be hitting a bucket config issue.
             throw error;
         }
     }
