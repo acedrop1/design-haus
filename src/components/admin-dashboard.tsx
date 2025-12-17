@@ -152,6 +152,21 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         generateDesign();
     }, [selectedSessionId, activeMessages, pendingDesign]);
 
+    // Helper function to upload base64 images to Firebase Storage
+    const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
+        try {
+            // Extract base64 content (remove data:image/png;base64, prefix)
+            const base64Content = base64Data.split(',')[1];
+            const blob = await fetch(base64Data).then(res => res.blob());
+
+            const url = await StorageService.uploadImage(blob, path);
+            return url;
+        } catch (error) {
+            console.error("[ADMIN] Failed to upload base64 image:", error);
+            return null;
+        }
+    };
+
     // Actions
     const handleGenerateDesign = async () => {
         console.log("🔴 [ADMIN] handleGenerateDesign CALLED");
