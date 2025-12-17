@@ -57,16 +57,14 @@ export function MainLayout() {
             setMessages(msgs);
 
             // Self-Healing Intro: If we connected but there are NO messages,
-            // (e.g. refresh, failed first write), inject the intro now.
+            // (e.g. refresh, failed first write, or just empty), inject the intro logic.
             if (msgs.length === 0) {
                 const introKey = `intro_sent_${sessionId}`;
-                if (!localStorage.getItem(introKey)) {
-                    localStorage.setItem(introKey, "true");
 
-                    const introMsg: any = {
-                        id: "intro-temp-" + Date.now(),
-                        role: 'ai',
-                        content: `Welcome to DesignHaus! 🍬
+                const introMsg: any = {
+                    id: "intro-temp-" + Date.now(),
+                    role: 'ai',
+                    content: `Welcome to DesignHaus! 🍬
 
 We're here to help bring your design ideas to life and ready for **PRINT** in under 10 minutes. You get the file and send it to your print shop.
 
@@ -76,13 +74,16 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 3. Send your **Instagram @handle** so we can create a QR code on the design.
 
 Describe your vision, and you'll receive your file! 🍫`,
-                        timestamp: new Date()
-                    };
+                    timestamp: new Date()
+                };
 
-                    // 1. Show it INSTANTLY (Optimistic)
-                    setMessages([introMsg]);
+                // 1. ALWAYS Show it INSTANTLY (Optimistic Visual Fix)
+                // This ensures the user NEVER sees an empty screen.
+                setMessages([introMsg]);
 
-                    // 2. Write it to DB (Background)
+                // 2. Only Write to DB if we haven't done so for this session
+                if (!localStorage.getItem(introKey)) {
+                    localStorage.setItem(introKey, "true");
                     StorageService.addMessage(sessionId, introMsg);
                 }
             }
