@@ -1,6 +1,7 @@
 import { Message, DesignSession, Attachment } from "@/types";
 import { db, storage } from "@/lib/firebase";
-collection,
+import {
+    collection,
     addDoc,
     onSnapshot,
     query,

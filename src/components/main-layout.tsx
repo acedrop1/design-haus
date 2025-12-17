@@ -74,7 +74,7 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 3. Send your **Instagram @handle** so we can create a QR code on the design.
 
 Describe your vision, and you'll receive your file! 🍫`,
-                    timestamp: new Date() as any // Firebase timestamp compat
+                    timestamp: new Date() as unknown as any // Firebase timestamp compat
                 };
 
                 // 1. ALWAYS Show it INSTANTLY (Optimistic Visual Fix)

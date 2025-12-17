@@ -147,8 +147,8 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false, onE
 
             recorder.start();
             setIsRecording(true);
-        } catch (err: any) {
-            console.error("Error accessing microphone:", err);
+        } catch (error: unknown) {
+            console.error("Error accessing microphone:", error);
             // Fallback alert
             alert("Microphone access denied or not available (Ensure HTTPS or Localhost).");
         }
