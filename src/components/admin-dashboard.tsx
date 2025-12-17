@@ -37,7 +37,11 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     useEffect(() => {
         const load = async () => {
             const all = await StorageService.getAllSessions();
-            const sorted = all.sort((a, b) => b.lastActive - a.lastActive);
+            const sorted = all.sort((a, b) => {
+                const tA = new Date(a.createdAt || 0).getTime();
+                const tB = new Date(b.createdAt || 0).getTime();
+                return tB - tA;
+            });
             setSessions(sorted);
 
             if (currentSessionId && sorted.find(s => s.id === currentSessionId)) {
