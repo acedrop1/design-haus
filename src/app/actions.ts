@@ -86,6 +86,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             };
         }
 
+    } catch (error) {
         console.error("[SERVER] Generation logic failed:", error);
         return {
             success: true,
