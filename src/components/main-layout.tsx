@@ -55,14 +55,34 @@ export function MainLayout() {
         // Listen to Messages
         const unsubMessages = StorageService.subscribeToMessages(sessionId, (msgs) => {
             setMessages(msgs);
+
+            // Self-Healing Intro: If we connected but there are NO messages,
+            // (e.g. refresh, failed first write), inject the intro now.
+            if (msgs.length === 0) {
+                const introKey = `intro_sent_${sessionId}`;
+                if (!localStorage.getItem(introKey)) {
+                    localStorage.setItem(introKey, "true");
+                    StorageService.addMessage(sessionId, {
+                        role: 'ai',
+                        content: `Welcome to DesignHaus! 🍬
+
+We're here to help bring your design ideas to life and ready for **PRINT** in under 10 minutes. You get the file and send it to your print shop.
+
+**To get started:**
+1. Describe your idea & flavor name.
+2. Attach your **Logo** or brand name (if you have one).
+3. Send your **Instagram @handle** so we can create a QR code on the design.
+
+Describe your vision, and you'll receive your file! 🍫`
+                    });
+                }
+            }
         });
 
         // Listen to Session (for pendingDesign sync and started status)
         const unsubSession = StorageService.subscribeToSession(sessionId, (data) => {
             if (data) {
                 setPendingDesign(data.pendingDesign);
-                // removing auto-start to preventing locking user in chat
-                // if (data.started) setHasStarted(true); 
             }
         });
 
