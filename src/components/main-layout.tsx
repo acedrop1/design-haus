@@ -73,23 +73,24 @@ export function MainLayout() {
     }, [sessionId]);
 
     const handleStart = async () => {
-        let currentSessionId = sessionId;
+        try {
+            let currentSessionId = sessionId;
 
-        // Race Condition Fix: If Start is clicked before initSession completes,
-        // force create a session immediately so the user isn't blocked.
-        if (!currentSessionId) {
-            currentSessionId = await StorageService.createSession();
-            setSessionId(currentSessionId);
-            localStorage.setItem("designhaus_session_id", currentSessionId);
-        }
+            // Race Condition Fix: If Start is clicked before initSession completes,
+            // force create a session immediately so the user isn't blocked.
+            if (!currentSessionId) {
+                currentSessionId = await StorageService.createSession();
+                setSessionId(currentSessionId);
+                localStorage.setItem("designhaus_session_id", currentSessionId);
+            }
 
-        setHasStarted(true);
+            setHasStarted(true);
 
-        // Add intro message FIRST, then mark as started
-        // This guarantees ordering
-        await StorageService.addMessage(currentSessionId, {
-            role: 'ai',
-            content: `Welcome to DesignHaus! 🍬
+            // Add intro message FIRST, then mark as started
+            // This guarantees ordering
+            await StorageService.addMessage(currentSessionId, {
+                role: 'ai',
+                content: `Welcome to DesignHaus! 🍬
 
 We're here to help bring your design ideas to life and ready for **PRINT** in under 10 minutes. You get the file and send it to your print shop.
 
@@ -99,9 +100,16 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 3. Send your **Instagram @handle** so we can create a QR code on the design.
 
 Describe your vision, and you'll receive your file! 🍫`
-        });
+            });
 
-        await StorageService.startSession(currentSessionId);
+            await StorageService.startSession(currentSessionId);
+        } catch (error: any) {
+            console.error("Start Error:", error);
+            // Fallback: If DB fails, just let them in locally so they aren't blocked
+            // but show an alert so we know.
+            alert(`Connection Error: ${error.message || "Unknown"}. Falling back to offline mode.`);
+            setHasStarted(true); // Let them in anyway
+        }
     };
 
     const handleExit = () => {
