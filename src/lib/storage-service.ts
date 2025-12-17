@@ -120,7 +120,7 @@ export const StorageService = {
         if (USE_MOCK) {
             const db = getLocalDB();
             const id = "msg_" + Date.now();
-            // @ts-expect-error - id is dynamically added
+
             finalMessage.id = id;
 
             if (!db.messages[sessionId]) db.messages[sessionId] = {};
@@ -151,7 +151,8 @@ export const StorageService = {
             // Poll or Listener
             const check = () => {
                 const db = getLocalDB();
-                // @ts-expect-error - db structure is loose
+
+
                 const s = db.sessions[sessionId];
                 if (s) callback(s);
             };
@@ -240,9 +241,7 @@ export const StorageService = {
             // Client-side sort
             const sorted = sess.sort((a, b) => {
                 // Handle standard Date object or Firestore Timestamp
-                // @ts-expect-error - Firestore timestamp compat
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
-                // @ts-expect-error - Firestore timestamp compat
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
                 return timeB - timeA;
             });
