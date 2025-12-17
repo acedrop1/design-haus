@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { generatePackagingDesign } from "@/app/actions";
 import {
     Loader2, Send, Wand2, RefreshCcw, Lock, Unlock,
     MessageSquare, ChevronLeft, Image as ImageIcon,
@@ -75,240 +76,280 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         };
     }, [selectedSessionId]);
 
-    // Actions
-    const handleRefine = async () => {
-        if (!selectedSessionId || !pendingDesign) return;
-        await StorageService.updateSessionPendingDesign(selectedSessionId, {
-            ...pendingDesign,
-            status: 'refined'
-        });
-        setRefineText("");
-    };
+    // Auto-generate design when admin views session with new client messages
+    useEffect(() => {
+        if (!selectedSessionId || !activeMessages.length) return;
+        if (pendingDesign) return; // Already has a design
 
-    const handleSendProposal = async (price: number) => {
-        if (!selectedSessionId || !pendingDesign) return;
+        // Find the last client message
+        const lastClientMessage = [...activeMessages]
+            .reverse()
+            .find(msg => msg.role === 'user');
 
-        await StorageService.addMessage(selectedSessionId, {
-            role: 'ai',
-            content: "I have generated a concept based on your specifications. Please unlock the high-resolution render below.",
-            imageUrl: pendingDesign.imageUrl,
-            isLocked: true,
-            proposalAmount: price,
-            isProposal: true,
-            isPaid: false
-        });
+        if (!lastClientMessage) return;
 
-        await StorageService.updateSessionPendingDesign(selectedSessionId, null);
-    };
+        // Auto-generate design from last client message
+        const generateDesign = async () => {
+            console.log("🎨 [ADMIN] Auto-generating design for client message:", lastClientMessage.content);
 
-    const handleAdminMessage = async () => {
-        if (!selectedSessionId || !adminInput.trim()) return;
+            try {
+                const result = await generatePackagingDesign(lastClientMessage.content);
+                console.log("🎨 [ADMIN] AI Result:", result);
 
-        await StorageService.addMessage(selectedSessionId, {
-            role: 'ai',
-            content: adminInput
-        });
-        setAdminInput("");
-    };
+                if (result.success && result.imageUrl) {
+                    console.log("✅ [ADMIN] Updating pendingDesign in session:", selectedSessionId);
+                    await StorageService.updateSessionPendingDesign(selectedSessionId, {
+                        originalPrompt: lastClientMessage.content,
+                        imageUrl: result.imageUrl,
+                        status: 'generated'
+                    });
+                    console.log("✅ [ADMIN] PendingDesign updated - should appear in staging area");
+                } else {
+                    console.warn("⚠️ [ADMIN] AI returned success but no imageUrl", result);
+                }
+            } catch (error) {
+                console.error("❌ [ADMIN] AI Generation Failed:", error);
+            }
+        };
 
-    const handleUnlock = async (messageId: string) => {
-        if (!selectedSessionId) return;
-        await StorageService.updateMessage(selectedSessionId, messageId, {
-            isLocked: false,
-            isPaid: true
-        });
-    };
+        generateDesign();
+    }, [selectedSessionId, activeMessages, pendingDesign
+    }, [selectedSessionId]);
 
-    return (
-        <div className="fixed inset-0 z-50 bg-black flex font-sans">
-            {/* Sidebar (Original Design) */}
-            <div
-                className={cn(
-                    "bg-zinc-950 border-r border-zinc-800 w-80 h-full transform transition-transform duration-300 flex flex-col absolute md:relative z-20",
-                    isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-                )}
-            >
-                <div className="p-6 border-b border-zinc-800 bg-black">
-                    <h2 className="text-[var(--accent-yellow)] font-bold text-xl uppercase tracking-tighter">Admin Console</h2>
-                    <p className="text-zinc-500 text-xs mt-1 mb-2">DesignHaus Internal v2.5</p>
-                    <div className="flex items-center gap-2">
-                        <div className={cn("w-2 h-2 rounded-full animate-pulse",
-                            process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
-                                ? "bg-green-500"
-                                : "bg-red-500"
-                        )} />
-                        <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
-                            {process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
-                                ? "System: Online"
-                                : "System: Local Mode"}
-                        </span>
-                    </div>
-                </div>
+// Actions
+const handleRefine = async () => {
+    if (!selectedSessionId || !pendingDesign) return;
+    await StorageService.updateSessionPendingDesign(selectedSessionId, {
+        ...pendingDesign,
+        status: 'refined'
+    });
+    setRefineText("");
+};
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                    <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Sessions</div>
-                    {sessions.map(session => (
-                        <div
-                            key={session.id}
-                            onClick={() => setSelectedSessionId(session.id)}
-                            className={cn(
-                                "border p-4 rounded-lg cursor-pointer transition-colors",
-                                selectedSessionId === session.id
-                                    ? "bg-zinc-900 border-[var(--accent-yellow)]/50"
-                                    : "bg-black border-zinc-800 hover:border-zinc-700"
-                            )}
-                        >
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-white font-medium text-sm">{session.clientName}</span>
-                                <span className="text-[10px] text-zinc-600">{session.id.slice(0, 8)}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+const handleSendProposal = async (price: number) => {
+    if (!selectedSessionId || !pendingDesign) return;
 
-                {/* Pending Unlocks Panel */}
-                <div className="p-4 border-t border-zinc-800 bg-black/50">
-                    <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Pending Unlocks</div>
-                    <div className="space-y-2">
-                        {activeMessages.filter(m => m.isLocked).map(m => (
-                            <div key={m.id} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800">
-                                <span className="text-xs text-zinc-300">Prop ${m.proposalAmount}</span>
-                                <button
-                                    onClick={() => handleUnlock(m.id)}
-                                    className="text-[10px] bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded uppercase font-bold"
-                                >
-                                    Mark Paid
-                                </button>
-                            </div>
-                        ))}
-                    </div>
+    await StorageService.addMessage(selectedSessionId, {
+        role: 'ai',
+        content: "I have generated a concept based on your specifications. Please unlock the high-resolution render below.",
+        imageUrl: pendingDesign.imageUrl,
+        isLocked: true,
+        proposalAmount: price,
+        isProposal: true,
+        isPaid: false
+    });
+
+    await StorageService.updateSessionPendingDesign(selectedSessionId, null);
+};
+
+const handleAdminMessage = async () => {
+    if (!selectedSessionId || !adminInput.trim()) return;
+
+    await StorageService.addMessage(selectedSessionId, {
+        role: 'ai',
+        content: adminInput
+    });
+    setAdminInput("");
+};
+
+const handleUnlock = async (messageId: string) => {
+    if (!selectedSessionId) return;
+    await StorageService.updateMessage(selectedSessionId, messageId, {
+        isLocked: false,
+        isPaid: true
+    });
+};
+
+return (
+    <div className="fixed inset-0 z-50 bg-black flex font-sans">
+        {/* Sidebar (Original Design) */}
+        <div
+            className={cn(
+                "bg-zinc-950 border-r border-zinc-800 w-80 h-full transform transition-transform duration-300 flex flex-col absolute md:relative z-20",
+                isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+            )}
+        >
+            <div className="p-6 border-b border-zinc-800 bg-black">
+                <h2 className="text-[var(--accent-yellow)] font-bold text-xl uppercase tracking-tighter">Admin Console</h2>
+                <p className="text-zinc-500 text-xs mt-1 mb-2">DesignHaus Internal v2.5</p>
+                <div className="flex items-center gap-2">
+                    <div className={cn("w-2 h-2 rounded-full animate-pulse",
+                        process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
+                            ? "bg-green-500"
+                            : "bg-red-500"
+                    )} />
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
+                        {process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
+                            ? "System: Online"
+                            : "System: Local Mode"}
+                    </span>
                 </div>
             </div>
 
-            {/* Main Area */}
-            <div className="flex-1 flex flex-col h-full relative bg-black">
-                {/* Top Bar */}
-                <div className="h-16 flex items-center justify-between px-6 bg-transparent z-10 w-full border-b border-zinc-900">
-                    <button
-                        onClick={onToggleSidebar}
-                        className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
-                    >
-                        {isSidebarOpen ? "Close Menu" : "Menu"}
-                    </button>
-                    <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
-                        Target: {selectedSessionId === currentSessionId ? "This Device" : selectedSessionId?.slice(0, 6)}
-                    </div>
-                </div>
-
-                {/* Chat History (New Improved View) */}
-                <div className="absolute inset-0 pt-20 pb-20 px-4 md:px-8 overflow-y-auto" style={{ willChange: 'transform' }}>
-                    <div className="max-w-4xl mx-auto space-y-4">
-                        {selectedSessionId ? (
-                            activeMessages.length > 0 ? (
-                                activeMessages.map((msg) => (
-                                    <div
-                                        key={msg.id}
-                                        className={cn(
-                                            "flex w-full",
-                                            msg.role === 'user' ? "justify-start" : "justify-end"
-                                        )}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "max-w-[70%] md:max-w-[60%] p-4 rounded-2xl text-sm relative group",
-                                                msg.role === 'user'
-                                                    ? "bg-[#1E1E24] text-gray-200 rounded-tl-sm"
-                                                    : "bg-[var(--accent-yellow)] text-black rounded-tr-sm font-medium"
-                                            )}
-                                        >
-                                            <div className="text-[10px] opacity-50 mb-1 uppercase tracking-wider font-bold">
-                                                {msg.role === 'user' ? "Client" : "Designer"}
-                                            </div>
-
-                                            {msg.content && <div className="leading-relaxed">{msg.content}</div>}
-
-                                            {msg.imageUrl && (
-                                                <div className="mt-2 rounded overflow-hidden border border-black/10">
-                                                    <img src={msg.imageUrl} alt="Design" className="w-full h-auto object-cover" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-center text-zinc-600 mt-20">No messages in this session</div>
-                            )
-                        ) : (
-                            <div className="text-center text-zinc-600 mt-20">Select a session to view chat</div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Sessions</div>
+                {sessions.map(session => (
+                    <div
+                        key={session.id}
+                        onClick={() => setSelectedSessionId(session.id)}
+                        className={cn(
+                            "border p-4 rounded-lg cursor-pointer transition-colors",
+                            selectedSessionId === session.id
+                                ? "bg-zinc-900 border-[var(--accent-yellow)]/50"
+                                : "bg-black border-zinc-800 hover:border-zinc-700"
                         )}
-                        <div className="h-24"></div>
+                    >
+                        <div className="flex justify-between items-start mb-1">
+                            <span className="text-white font-medium text-sm">{session.clientName}</span>
+                            <span className="text-[10px] text-zinc-600">{session.id.slice(0, 8)}</span>
+                        </div>
                     </div>
-                </div>
+                ))}
+            </div>
 
-                {/* Staging Area (Original Sidebar Overlay Style) */}
-                {pendingDesign && (
-                    <div className="absolute top-20 right-8 w-96 bg-zinc-900/95 backdrop-blur-md border border-[var(--accent-yellow)]/30 rounded-xl shadow-2xl overflow-hidden flex flex-col z-30">
-                        <div className="p-3 bg-black border-b border-zinc-800 flex justify-between items-center">
-                            <h3 className="text-white text-sm font-bold uppercase flex items-center gap-2">
-                                <Wand2 className="w-4 h-4 text-[var(--accent-yellow)]" /> Staging Area
-                            </h3>
-                            <span className="text-[10px] text-zinc-500 uppercase">{pendingDesign.status}</span>
-                        </div>
-
-                        <div className="relative aspect-[4/5] bg-black/50">
-                            <img src={pendingDesign.imageUrl} className="w-full h-full object-contain" alt="Staged" />
-                        </div>
-
-                        <div className="p-4 space-y-3">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={refineText}
-                                    onChange={(e) => setRefineText(e.target.value)}
-                                    placeholder="Refine..."
-                                    className="flex-1 bg-black border border-zinc-700 rounded px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[var(--accent-yellow)] outline-none"
-                                />
-                                <button
-                                    onClick={handleRefine}
-                                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded text-xs"
-                                >
-                                    <RefreshCcw className="w-4 h-4" />
-                                </button>
-                            </div>
-
+            {/* Pending Unlocks Panel */}
+            <div className="p-4 border-t border-zinc-800 bg-black/50">
+                <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Pending Unlocks</div>
+                <div className="space-y-2">
+                    {activeMessages.filter(m => m.isLocked).map(m => (
+                        <div key={m.id} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800">
+                            <span className="text-xs text-zinc-300">Prop ${m.proposalAmount}</span>
                             <button
-                                onClick={() => handleSendProposal(25)}
-                                className="w-full bg-[var(--accent-yellow)] hover:bg-white text-black font-bold py-3 rounded text-sm uppercase tracking-wider flex items-center justify-center gap-2"
+                                onClick={() => handleUnlock(m.id)}
+                                className="text-[10px] bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded uppercase font-bold"
                             >
-                                Send Proposal ($25) <Send className="w-4 h-4" />
+                                Mark Paid
                             </button>
                         </div>
-                    </div>
-                )}
-
-                {/* Floating Input Bar (New feature kept) */}
-                <div className="absolute bottom-6 left-0 right-0 px-4 md:px-0 flex justify-center z-40">
-                    <div className="w-full max-w-2xl bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl p-2 flex gap-2">
-                        <button className="p-3 text-zinc-500 hover:text-white transition-colors">
-                            <ImageIcon className="w-5 h-5" />
-                        </button>
-                        <input
-                            value={adminInput}
-                            onChange={(e) => setAdminInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleAdminMessage()}
-                            placeholder="Message the client..."
-                            className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none"
-                        />
-                        <button
-                            onClick={handleAdminMessage}
-                            className="p-3 bg-[var(--accent-yellow)] hover:bg-white text-black rounded-lg transition-colors"
-                        >
-                            <Send className="w-4 h-4" />
-                        </button>
-                    </div>
+                    ))}
                 </div>
             </div>
         </div>
 
-    );
+        {/* Main Area */}
+        <div className="flex-1 flex flex-col h-full relative bg-black">
+            {/* Top Bar */}
+            <div className="h-16 flex items-center justify-between px-6 bg-transparent z-10 w-full border-b border-zinc-900">
+                <button
+                    onClick={onToggleSidebar}
+                    className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
+                >
+                    {isSidebarOpen ? "Close Menu" : "Menu"}
+                </button>
+                <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
+                    Target: {selectedSessionId === currentSessionId ? "This Device" : selectedSessionId?.slice(0, 6)}
+                </div>
+            </div>
+
+            {/* Chat History (New Improved View) */}
+            <div className="absolute inset-0 pt-20 pb-20 px-4 md:px-8 overflow-y-auto" style={{ willChange: 'transform' }}>
+                <div className="max-w-4xl mx-auto space-y-4">
+                    {selectedSessionId ? (
+                        activeMessages.length > 0 ? (
+                            activeMessages.map((msg) => (
+                                <div
+                                    key={msg.id}
+                                    className={cn(
+                                        "flex w-full",
+                                        msg.role === 'user' ? "justify-start" : "justify-end"
+                                    )}
+                                >
+                                    <div
+                                        className={cn(
+                                            "max-w-[70%] md:max-w-[60%] p-4 rounded-2xl text-sm relative group",
+                                            msg.role === 'user'
+                                                ? "bg-[#1E1E24] text-gray-200 rounded-tl-sm"
+                                                : "bg-[var(--accent-yellow)] text-black rounded-tr-sm font-medium"
+                                        )}
+                                    >
+                                        <div className="text-[10px] opacity-50 mb-1 uppercase tracking-wider font-bold">
+                                            {msg.role === 'user' ? "Client" : "Designer"}
+                                        </div>
+
+                                        {msg.content && <div className="leading-relaxed">{msg.content}</div>}
+
+                                        {msg.imageUrl && (
+                                            <div className="mt-2 rounded overflow-hidden border border-black/10">
+                                                <img src={msg.imageUrl} alt="Design" className="w-full h-auto object-cover" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center text-zinc-600 mt-20">No messages in this session</div>
+                        )
+                    ) : (
+                        <div className="text-center text-zinc-600 mt-20">Select a session to view chat</div>
+                    )}
+                    <div className="h-24"></div>
+                </div>
+            </div>
+
+            {/* Staging Area (Original Sidebar Overlay Style) */}
+            {pendingDesign && (
+                <div className="absolute top-20 right-8 w-96 bg-zinc-900/95 backdrop-blur-md border border-[var(--accent-yellow)]/30 rounded-xl shadow-2xl overflow-hidden flex flex-col z-30">
+                    <div className="p-3 bg-black border-b border-zinc-800 flex justify-between items-center">
+                        <h3 className="text-white text-sm font-bold uppercase flex items-center gap-2">
+                            <Wand2 className="w-4 h-4 text-[var(--accent-yellow)]" /> Staging Area
+                        </h3>
+                        <span className="text-[10px] text-zinc-500 uppercase">{pendingDesign.status}</span>
+                    </div>
+
+                    <div className="relative aspect-[4/5] bg-black/50">
+                        <img src={pendingDesign.imageUrl} className="w-full h-full object-contain" alt="Staged" />
+                    </div>
+
+                    <div className="p-4 space-y-3">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={refineText}
+                                onChange={(e) => setRefineText(e.target.value)}
+                                placeholder="Refine..."
+                                className="flex-1 bg-black border border-zinc-700 rounded px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[var(--accent-yellow)] outline-none"
+                            />
+                            <button
+                                onClick={handleRefine}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded text-xs"
+                            >
+                                <RefreshCcw className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => handleSendProposal(25)}
+                            className="w-full bg-[var(--accent-yellow)] hover:bg-white text-black font-bold py-3 rounded text-sm uppercase tracking-wider flex items-center justify-center gap-2"
+                        >
+                            Send Proposal ($25) <Send className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Input Bar (New feature kept) */}
+            <div className="absolute bottom-6 left-0 right-0 px-4 md:px-0 flex justify-center z-40">
+                <div className="w-full max-w-2xl bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl p-2 flex gap-2">
+                    <button className="p-3 text-zinc-500 hover:text-white transition-colors">
+                        <ImageIcon className="w-5 h-5" />
+                    </button>
+                    <input
+                        value={adminInput}
+                        onChange={(e) => setAdminInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAdminMessage()}
+                        placeholder="Message the client..."
+                        className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none"
+                    />
+                    <button
+                        onClick={handleAdminMessage}
+                        className="p-3 bg-[var(--accent-yellow)] hover:bg-white text-black rounded-lg transition-colors"
+                    >
+                        <Send className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+);
 }

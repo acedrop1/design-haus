@@ -150,7 +150,8 @@ Describe your vision, and you'll receive your file! 🍫`
     const handleSendMessage = async (text: string, attachments: Attachment[], audioUrl?: string) => {
         if (!sessionId) return;
 
-        // 1. Write User Message to Service (Critical - must succeed)
+        console.log("📤 Client sending message:", text);
+
         try {
             const userMessage: any = {
                 role: 'user',
@@ -164,35 +165,13 @@ Describe your vision, and you'll receive your file! 🍫`
             }
 
             await StorageService.addMessage(sessionId, userMessage);
+            console.log("✅ Client message sent successfully");
         } catch (error) {
-            console.error("CRITICAL: Message Send Failed:", error);
+            console.error("❌ CRITICAL: Message Send Failed:", error);
             alert("Could not send message. Please check your connection.");
-            return; // Stop here if message fails
         }
 
-        // 2. Trigger AI (Optional - don't block if this fails)
-        const prompt = audioUrl ? `[Voice Note: ${text}]` : text;
-        const finalPrompt = attachments.length > 0 ? `[Attachments] ${prompt}` : prompt;
-
-        try {
-            console.log("🎨 Triggering AI Design Generation for:", finalPrompt);
-            const result = await generatePackagingDesign(finalPrompt);
-            console.log("🎨 AI Result:", result);
-            if (result.success && result.imageUrl) {
-                console.log("✅ Updating pendingDesign in session:", sessionId);
-                await StorageService.updateSessionPendingDesign(sessionId, {
-                    originalPrompt: finalPrompt,
-                    imageUrl: result.imageUrl,
-                    status: 'generated'
-                });
-                console.log("✅ PendingDesign updated successfully");
-            } else {
-                console.warn("⚠️ AI returned success but no imageUrl", result);
-            }
-        } catch (aiError) {
-            console.error("❌ AI Generation Failed (non-critical):", aiError);
-            // Silent fail - user's message was already sent successfully
-        }
+        // NOTE: AI generation now happens in Admin view, not here
     };
 
     const handleAdminLogin = () => {
