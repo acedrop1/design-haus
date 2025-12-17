@@ -1,69 +1,76 @@
-import { useState, useEffect } from "react";
-import { Menu, Wand2, Send, RefreshCcw } from "lucide-react";
-import { Message, DesignSession } from "@/types";
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import {
+    Loader2, Send, Wand2, RefreshCcw, Lock, Unlock,
+    MessageSquare, ChevronLeft, Image as ImageIcon,
+    CheckCircle2, X
+} from "lucide-react";
+import { StorageService, type Session, type Message, type DesignState } from "@/lib/storage-service";
 import { cn } from "@/lib/utils";
-import { StorageService } from "@/lib/storage-service";
 
 interface AdminDashboardProps {
-    currentSessionId: string | null;
-    onToggleSidebar: () => void;
-    isSidebarOpen: boolean;
+    currentSessionId: string;
 }
 
-export function AdminDashboard({
-    currentSessionId,
-    onToggleSidebar,
-    isSidebarOpen
-}: AdminDashboardProps) {
-    // State
-    const [sessions, setSessions] = useState<DesignSession[]>([]);
-    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(currentSessionId);
-
-    // Selected Session Data
+export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
+    const [sessions, setSessions] = useState<Session[]>([]);
+    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
     const [activeMessages, setActiveMessages] = useState<Message[]>([]);
-    const [pendingDesign, setPendingDesign] = useState<{
-        originalPrompt: string;
-        imageUrl: string;
-        status: 'generated' | 'refined';
-    } | undefined>(undefined);
-
+    const [pendingDesign, setPendingDesign] = useState<DesignState | null>(null);
     const [refineText, setRefineText] = useState("");
+    const [adminInput, setAdminInput] = useState("");
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    // 1. Listen to All Sessions
+    // Initial Load
     useEffect(() => {
-        const unsub = StorageService.subscribeToAllSessions((sess) => {
-            setSessions(sess);
-        });
-        return () => { if (unsub) unsub(); }
-    }, []);
+        const load = async () => {
+            const all = await StorageService.getAllSessions();
+            // Sort by most recent
+            const sorted = all.sort((a, b) => b.lastActive - a.lastActive);
+            setSessions(sorted);
 
-    // 2. Listen to Selected Session
+            // Auto-select the current session if valid, or the first one
+            if (currentSessionId && sorted.find(s => s.id === currentSessionId)) {
+                setSelectedSessionId(currentSessionId);
+            } else if (sorted.length > 0) {
+                setSelectedSessionId(sorted[0].id);
+            }
+        };
+        load();
+
+        // Poll for new sessions every 5s
+        const interval = setInterval(load, 5000);
+        return () => clearInterval(interval);
+    }, [currentSessionId]);
+
+    // Listen to Selected Session
     useEffect(() => {
         if (!selectedSessionId) return;
 
-        // Sync Messages
+        // Subscribe to messages
         const unsubMsg = StorageService.subscribeToMessages(selectedSessionId, (msgs) => {
             setActiveMessages(msgs);
         });
 
-        // Sync Session Pending Design
-        const unsubSess = StorageService.subscribeToSession(selectedSessionId, (data) => {
-            if (data) {
-                setPendingDesign(data.pendingDesign);
+        // Subscribe to session state (for pending design)
+        const unsubSess = StorageService.subscribeToSession(selectedSessionId, (sess: Session | null) => {
+            if (sess) {
+                setPendingDesign(sess.pendingDesign || null);
             }
         });
 
         return () => {
-            if (unsubMsg) unsubMsg();
-            if (unsubSess) unsubSess();
+            unsubMsg();
+            unsubSess();
         };
     }, [selectedSessionId]);
 
     // Actions
     const handleRefine = async () => {
         if (!selectedSessionId || !pendingDesign) return;
-        // Just mock status update
-        StorageService.updateSessionPendingDesign(selectedSessionId, {
+        // Mock refinement
+        await StorageService.updateSessionPendingDesign(selectedSessionId, {
             ...pendingDesign,
             status: 'refined'
         });
@@ -75,7 +82,7 @@ export function AdminDashboard({
 
         // Add Message
         await StorageService.addMessage(selectedSessionId, {
-            role: 'ai', // Internal role stays 'ai' for logic, UI displays 'Designer'
+            role: 'ai',
             content: "I have generated a concept based on your specifications. Please unlock the high-resolution render below.",
             imageUrl: pendingDesign.imageUrl,
             isLocked: true,
@@ -85,7 +92,18 @@ export function AdminDashboard({
         });
 
         // Clear Pending
-        StorageService.updateSessionPendingDesign(selectedSessionId, null);
+        await StorageService.updateSessionPendingDesign(selectedSessionId, null);
+    };
+
+    const handleAdminMessage = async () => {
+        if (!selectedSessionId || !adminInput.trim()) return;
+
+        // Admin acts as "AI/Designer"
+        await StorageService.addMessage(selectedSessionId, {
+            role: 'ai',
+            content: adminInput
+        });
+        setAdminInput("");
     };
 
     const handleUnlock = async (messageId: string) => {
@@ -97,174 +115,183 @@ export function AdminDashboard({
     };
 
     return (
-        <div className="fixed inset-0 z-50 pointer-events-none flex">
-            {/* Sidebar */}
-            <div
-                className={cn(
-                    "bg-zinc-950 border-r border-zinc-800 w-80 h-full transform transition-transform duration-300 pointer-events-auto flex flex-col",
-                    isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-                )}
-            >
-                <div className="p-6 border-b border-zinc-800 bg-black">
-                    <h2 className="text-[var(--accent-yellow)] font-bold text-xl uppercase tracking-tighter">Admin Console</h2>
-                    <p className="text-zinc-500 text-xs mt-1 mb-2">DesignHaus Internal v2.5</p>
-                    {/* Connection Status Indicator */}
-                    <div className="flex items-center gap-2">
-                        <div className={cn("w-2 h-2 rounded-full animate-pulse",
-                            process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
-                                ? "bg-green-500"
-                                : "bg-red-500"
-                        )} />
-                        <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
-                            {process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
-                                ? "System: Online"
-                                : "System: Local Mode"}
-                        </span>
+        <div className="fixed inset-0 bg-black text-white z-50 font-sans flex flex-col">
+            {/* Header */}
+            <header className="h-16 border-b border-zinc-900 bg-black flex items-center justify-between px-6 z-20">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden text-white">
+                        <MessageSquare />
+                    </button>
+                    <h1 className="text-xl font-bold tracking-tight text-white uppercase">PackHaus</h1>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest hidden md:block">
+                        Session: {selectedSessionId?.slice(0, 8)}
+                    </span>
+                    <div className="px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900 text-[10px] font-bold text-[var(--accent-yellow)] uppercase tracking-wider flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Designer View
                     </div>
                 </div>
+            </header>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                    <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Sessions</div>
-                    {sessions.map(session => (
-                        <div
-                            key={session.id}
-                            onClick={() => setSelectedSessionId(session.id)}
-                            className={cn(
-                                "border p-4 rounded-lg cursor-pointer transition-colors",
-                                selectedSessionId === session.id
-                                    ? "bg-zinc-900 border-[var(--accent-yellow)]/50"
-                                    : "bg-black border-zinc-800 hover:border-zinc-700"
-                            )}
-                        >
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-white font-medium text-sm">{session.clientName}</span>
-                                <span className="text-[10px] text-zinc-600">{session.id.slice(0, 8)}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Action Log / Unlocks for SELECTED session */}
-                <div className="p-4 border-t border-zinc-800 bg-black/50">
-                    <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Pending Unlocks (Current)</div>
-                    <div className="space-y-2">
-                        {activeMessages.filter(m => m.isLocked).map(m => (
-                            <div key={m.id} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800">
-                                <span className="text-xs text-zinc-300">Prop ${m.proposalAmount}</span>
-                                <button
-                                    onClick={() => handleUnlock(m.id)}
-                                    className="text-[10px] bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded uppercase font-bold"
-                                >
-                                    Mark Paid
-                                </button>
-                            </div>
+            <div className="flex-1 flex overflow-hidden relative">
+                {/* Session Sidebar (Collapsible) */}
+                <div className={cn(
+                    "w-64 bg-zinc-950 border-r border-zinc-900 flex-col transition-all duration-300 absolute md:relative z-10 h-full",
+                    isMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+                )}>
+                    <div className="p-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Active Clients</div>
+                    <div className="overflow-y-auto flex-1 space-y-1 p-2">
+                        {sessions.map(s => (
+                            <button
+                                key={s.id}
+                                onClick={() => { setSelectedSessionId(s.id); setIsMenuOpen(false); }}
+                                className={cn(
+                                    "w-full text-left p-3 rounded-lg text-xs transition-colors border",
+                                    selectedSessionId === s.id
+                                        ? "bg-zinc-900 border-[var(--accent-yellow)]/50 text-white"
+                                        : "border-transparent text-zinc-400 hover:bg-zinc-900"
+                                )}
+                            >
+                                <div className="font-medium text-white mb-1 truncate">{s.clientName}</div>
+                                <div className="flex justify-between">
+                                    <span>#{s.id.slice(0, 4)}</span>
+                                    <span>{new Date(s.lastActive).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                            </button>
                         ))}
                     </div>
                 </div>
-            </div>
 
-            {/* Main Admin Overlay (Staging Area) */}
-            <div className="flex-1 flex flex-col h-full pointer-events-none relative">
-                <div className="h-16 flex items-center justify-between px-6 pointer-events-auto bg-transparent z-10">
-                    <button
-                        onClick={onToggleSidebar}
-                        className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
-                    >
-                        {isSidebarOpen ? "Close Menu" : "Menu"}
-                    </button>
-                    <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
-                        Target: {selectedSessionId === currentSessionId ? "This Device" : selectedSessionId?.slice(0, 6)}
-                    </div>
-                </div>
-
-                {/* Chat History View (NEW) */}
-                <div className="absolute inset-0 pt-20 pb-4 px-8 overflow-y-auto pointer-events-auto">
-                    <div className="max-w-3xl mx-auto space-y-4">
-                        {selectedSessionId ? (
-                            activeMessages.length > 0 ? (
-                                activeMessages.map((msg) => (
-                                    <div
-                                        key={msg.id}
-                                        className={cn(
-                                            "flex w-full",
-                                            msg.role === 'user' ? "justify-start" : "justify-end"
-                                        )}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "max-w-[70%] p-4 rounded-2xl text-sm",
-                                                msg.role === 'user'
-                                                    ? "bg-zinc-800 text-white rounded-tl-sm"
-                                                    : "bg-[var(--accent-yellow)] text-black rounded-tr-sm font-medium"
-                                            )}
-                                        >
-                                            {/* Label */}
-                                            <div className="text-[10px] opacity-50 mb-1 uppercase tracking-wider">
-                                                {msg.role === 'user' ? "Client" : "Designer"}
-                                            </div>
-
-                                            {/* Content */}
-                                            {msg.content}
-
-                                            {/* Images/Attachments */}
-                                            {msg.imageUrl && (
-                                                <div className="mt-2 rounded overflow-hidden">
-                                                    <img src={msg.imageUrl} alt="Design" className="w-full h-auto object-cover" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-center text-zinc-600 mt-20">No messages in this session</div>
-                            )
-                        ) : (
-                            <div className="text-center text-zinc-600 mt-20">Select a session to view chat</div>
-                        )}
-                        {/* Spacer for Staging Area overlap */}
-                        <div className="h-32"></div>
-                    </div>
-                </div>
-
-                {pendingDesign && (
-                    <div className="absolute top-20 right-8 w-96 bg-zinc-900/95 backdrop-blur-md border border-[var(--accent-yellow)]/30 rounded-xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col">
-                        <div className="p-3 bg-black border-b border-zinc-800 flex justify-between items-center">
-                            <h3 className="text-white text-sm font-bold uppercase flex items-center gap-2">
-                                <Wand2 className="w-4 h-4 text-[var(--accent-yellow)]" /> Staging Area
-                            </h3>
-                            <span className="text-[10px] text-zinc-500 uppercase">{pendingDesign.status}</span>
-                        </div>
-
-                        <div className="relative aspect-[4/5] bg-black/50">
-                            <img src={pendingDesign.imageUrl} className="w-full h-full object-contain" alt="Staged" />
-                        </div>
-
-                        <div className="p-4 space-y-3">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={refineText}
-                                    onChange={(e) => setRefineText(e.target.value)}
-                                    placeholder="Refine..."
-                                    className="flex-1 bg-black border border-zinc-700 rounded px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[var(--accent-yellow)] outline-none"
-                                />
-                                <button
-                                    onClick={handleRefine}
-                                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded text-xs"
-                                >
-                                    <RefreshCcw className="w-4 h-4" />
-                                </button>
+                {/* Main Chat Area */}
+                <div className="flex-1 relative flex flex-col bg-black">
+                    {/* Messages */}
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32">
+                        {activeMessages.length === 0 ? (
+                            <div className="flex h-full items-center justify-center text-zinc-700 text-sm uppercase tracking-widest">
+                                No messages in this session
                             </div>
+                        ) : (
+                            activeMessages.map((msg) => (
+                                <div key={msg.id} className={cn("flex w-full", msg.role === 'user' ? "justify-start" : "justify-end")}>
+                                    <div className={cn(
+                                        "max-w-[70%] md:max-w-[50%] p-4 rounded-2xl text-sm relative group",
+                                        msg.role === 'user'
+                                            ? "bg-[#1E1E24] text-gray-200 rounded-tl-sm"
+                                            : "bg-[var(--accent-yellow)] text-black rounded-tr-sm font-medium"
+                                    )}>
+                                        <div className="text-[10px] opacity-50 mb-1 uppercase tracking-wider font-bold">
+                                            {msg.role === 'user' ? "Client" : "Designer"}
+                                        </div>
 
+                                        {msg.content && <div className="leading-relaxed">{msg.content}</div>}
+
+                                        {msg.imageUrl && (
+                                            <div className="mt-3 relative rounded-lg overflow-hidden border border-black/10">
+                                                <img src={msg.imageUrl} className={cn("w-full h-auto object-cover", msg.isLocked && "blur-md scale-105")} alt="Design" />
+                                                {msg.isLocked && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                                        <Lock className="w-6 h-6 text-white drop-shadow-md" />
+                                                    </div>
+                                                )}
+                                                {msg.isLocked && (
+                                                    <button
+                                                        onClick={() => handleUnlock(msg.id)}
+                                                        className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        UNLOCK
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Pending Design Modal (Centered Card) */}
+                    {pendingDesign && (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                            <div className="w-full max-w-md bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
+                                {/* Header */}
+                                <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-900/50">
+                                    <div className="flex items-center gap-2 text-[var(--accent-yellow)] text-xs font-bold uppercase tracking-wider">
+                                        <Wand2 className="w-3 h-3" /> New Design Generated
+                                    </div>
+                                    <span className="text-[10px] px-2 py-1 bg-zinc-800 rounded text-zinc-400 uppercase">Admin View</span>
+                                </div>
+
+                                {/* Image Preview */}
+                                <div className="relative aspect-[4/5] bg-black group">
+                                    <img src={pendingDesign.imageUrl} className="w-full h-full object-contain" alt="Generated" />
+                                    <div className="absolute bottom-4 right-4 flex gap-2">
+                                        <button className="bg-black/50 hover:bg-black text-white p-2 rounded-full backdrop-blur transition-colors">
+                                            <ImageIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Controls */}
+                                <div className="p-4 bg-zinc-900 space-y-3">
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={refineText}
+                                            onChange={(e) => setRefineText(e.target.value)}
+                                            placeholder="Refine (e.g. 'Add QR code to bottom left')"
+                                            className="flex-1 bg-black border border-zinc-700 rounded px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-zinc-500 outline-none"
+                                        />
+                                        <button
+                                            onClick={handleRefine}
+                                            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded uppercase tracking-wider"
+                                        >
+                                            Refine
+                                        </button>
+                                    </div>
+
+                                    <div className="flex gap-2 pt-2">
+                                        <button
+                                            onClick={() => StorageService.updateSessionPendingDesign(selectedSessionId!, null)}
+                                            className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+                                        >
+                                            Discard
+                                        </button>
+                                        <button
+                                            onClick={() => handleSendProposal(25)}
+                                            className="flex-[2] py-3 bg-[var(--accent-yellow)] hover:bg-white text-black text-xs font-bold uppercase tracking-wider rounded transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            Send Proposal ($25)
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Input Bar (Floating) */}
+                    <div className="absolute bottom-6 left-0 right-0 px-4 md:px-0 flex justify-center pointer-events-none">
+                        <div className="w-full max-w-2xl bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl p-2 flex gap-2 pointer-events-auto">
+                            <button className="p-3 text-zinc-500 hover:text-white transition-colors">
+                                <ImageIcon className="w-5 h-5" />
+                            </button>
+                            <input
+                                value={adminInput}
+                                onChange={(e) => setAdminInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAdminMessage()}
+                                placeholder="Message the client..."
+                                className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none"
+                            />
                             <button
-                                onClick={() => handleSendProposal(25)}
-                                className="w-full bg-[var(--accent-yellow)] hover:bg-white text-black font-bold py-3 rounded text-sm uppercase tracking-wider flex items-center justify-center gap-2"
+                                onClick={handleAdminMessage}
+                                className="p-3 bg-[var(--accent-yellow)] hover:bg-white text-black rounded-lg transition-colors"
                             >
-                                Send Proposal ($25) <Send className="w-4 h-4" />
+                                <Send className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );
