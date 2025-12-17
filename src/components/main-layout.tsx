@@ -61,7 +61,7 @@ export function MainLayout() {
             if (msgs.length === 0) {
                 const introKey = `intro_sent_${sessionId}`;
 
-                const introMsg: any = {
+                const introMsg: Message = {
                     id: "intro-temp-" + Date.now(),
                     role: 'ai',
                     content: `Welcome to DesignHaus! 🍬
@@ -74,7 +74,7 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 3. Send your **Instagram @handle** so we can create a QR code on the design.
 
 Describe your vision, and you'll receive your file! 🍫`,
-                    timestamp: new Date()
+                    timestamp: new Date() as any // Firebase timestamp compat
                 };
 
                 // 1. ALWAYS Show it INSTANTLY (Optimistic Visual Fix)
@@ -135,12 +135,11 @@ Describe your vision, and you'll receive your file! 🍫`
             });
 
             await StorageService.startSession(currentSessionId);
-        } catch (error: any) {
-            console.error("Start Error:", error);
-            // Fallback: If DB fails, just let them in locally so they aren't blocked
-            // but show an alert so we know.
-            alert(`Connection Error: ${error.message || "Unknown"}. Falling back to offline mode.`);
-            // We already set hasStarted(true) at the top, so they are already in.
+        } catch (error) {
+            console.error("Critical Start Error:", error);
+            alert("Failed to start project (Connection Error). Please refresh.");
+            // Ideally fallback to offline mode here
+            setHasStarted(true);
         }
     };
 
@@ -179,8 +178,9 @@ Describe your vision, and you'll receive your file! 🍫`
                 // Admin just won't see a generated design immediately.
             }
 
-        } catch (e: any) {
-            console.error("Message Send Error:", e);
+        } catch (error) {
+            console.error("Message Send/AI Error:", error);
+            // Silent fail for AI, user message is already optimistic
             alert("Could not send message. Please check your connection.");
         }
     };

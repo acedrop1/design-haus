@@ -1,7 +1,6 @@
 import { Message, DesignSession, Attachment } from "@/types";
 import { db, storage } from "@/lib/firebase";
-import {
-    collection,
+collection,
     addDoc,
     onSnapshot,
     query,
@@ -9,10 +8,7 @@ import {
     serverTimestamp,
     doc,
     updateDoc,
-    getDocs,
-    getDoc,
-    setDoc,
-    Timestamp
+    getDoc
 } from "firebase/firestore";
 
 // --- Mock Data Structure for LocalStorage ---
@@ -27,7 +23,7 @@ function getLocalDB() {
     return data ? JSON.parse(data) : { sessions: {}, messages: {} };
 }
 
-function saveLocalDB(data: any) {
+function saveLocalDB(data: unknown) {
     if (typeof window === 'undefined') return;
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
     // Dispatch event for other tabs/components to react
@@ -95,7 +91,7 @@ export const StorageService = {
         await updateDoc(doc(db, "sessions", sessionId), { started: true });
     },
 
-    updateSessionPendingDesign(sessionId: string, pendingDesign: any) {
+    updateSessionPendingDesign(sessionId: string, pendingDesign: unknown) {
         if (USE_MOCK) {
             const db = getLocalDB();
             if (db.sessions[sessionId]) {
@@ -123,7 +119,7 @@ export const StorageService = {
         if (USE_MOCK) {
             const db = getLocalDB();
             const id = "msg_" + Date.now();
-            // @ts-ignore
+            // @ts-expect-error - id is dynamically added
             finalMessage.id = id;
 
             if (!db.messages[sessionId]) db.messages[sessionId] = {};
@@ -154,7 +150,7 @@ export const StorageService = {
             // Poll or Listener
             const check = () => {
                 const db = getLocalDB();
-                // @ts-ignore
+                // @ts-expect-error - db structure is loose
                 const s = db.sessions[sessionId];
                 if (s) callback(s);
             };
@@ -181,9 +177,11 @@ export const StorageService = {
             const check = () => {
                 const db = getLocalDB();
                 const msgsObj = db.messages[sessionId] || {};
-                const msgs = Object.values(msgsObj).sort((a: any, b: any) =>
-                    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-                );
+                const msgs = Object.values(msgsObj).sort((a, b) => {
+                    const tA = (a as Message).timestamp;
+                    const tB = (b as Message).timestamp;
+                    return new Date(tA as any).getTime() - new Date(tB as any).getTime();
+                });
                 callback(msgs as Message[]);
             };
 
@@ -213,9 +211,11 @@ export const StorageService = {
         if (USE_MOCK) {
             const check = () => {
                 const db = getLocalDB();
-                const sess = Object.values(db.sessions).sort((a: any, b: any) =>
-                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
+                const sess = Object.values(db.sessions).sort((a, b) => {
+                    const tA = (a as DesignSession).createdAt;
+                    const tB = (b as DesignSession).createdAt;
+                    return new Date(tB as any).getTime() - new Date(tA as any).getTime();
+                });
                 callback(sess as DesignSession[]);
             };
             check();
@@ -239,9 +239,9 @@ export const StorageService = {
             // Client-side sort
             const sorted = sess.sort((a, b) => {
                 // Handle standard Date object or Firestore Timestamp
-                // @ts-ignore
+                // @ts-expect-error - Firestore timestamp compat
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
-                // @ts-ignore
+                // @ts-expect-error - Firestore timestamp compat
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
                 return timeB - timeA;
             });
