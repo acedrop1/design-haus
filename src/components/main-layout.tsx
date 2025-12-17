@@ -73,13 +73,21 @@ export function MainLayout() {
     }, [sessionId]);
 
     const handleStart = async () => {
-        if (!sessionId) return;
+        let currentSessionId = sessionId;
+
+        // Race Condition Fix: If Start is clicked before initSession completes,
+        // force create a session immediately so the user isn't blocked.
+        if (!currentSessionId) {
+            currentSessionId = await StorageService.createSession();
+            setSessionId(currentSessionId);
+            localStorage.setItem("designhaus_session_id", currentSessionId);
+        }
 
         setHasStarted(true);
 
         // Add intro message FIRST, then mark as started
         // This guarantees ordering
-        await StorageService.addMessage(sessionId, {
+        await StorageService.addMessage(currentSessionId, {
             role: 'ai',
             content: `Welcome to DesignHaus! 🍬
 
@@ -93,7 +101,7 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 Describe your vision, and you'll receive your file! 🍫`
         });
 
-        await StorageService.startSession(sessionId);
+        await StorageService.startSession(currentSessionId);
     };
 
     const handleExit = () => {
