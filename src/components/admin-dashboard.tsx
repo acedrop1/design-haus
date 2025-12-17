@@ -154,17 +154,9 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
     // Helper function to upload base64 images to Firebase Storage
     const uploadBase64Image = async (base64Data: string, path: string): Promise<string | null> => {
-        try {
-            // Extract base64 content (remove data:image/png;base64, prefix)
-            const base64Content = base64Data.split(',')[1];
-            const blob = await fetch(base64Data).then(res => res.blob());
-
-            const url = await StorageService.uploadImage(blob, path);
-            return url;
-        } catch (error) {
-            console.error("[ADMIN] Failed to upload base64 image:", error);
-            return null;
-        }
+        // For now, just return the base64 data directly
+        // Firebase Storage upload can be added later if needed
+        return base64Data;
     };
 
     // Actions
@@ -192,16 +184,10 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             console.log("✅ [ADMIN] Generation result:", result);
 
             if (result.success && result.imageUrl) {
-                // Upload to Storage if Base64
-                let finalImageUrl = result.imageUrl;
-                if (result.imageUrl.startsWith('data:')) {
-                    const uploadResult = await uploadBase64Image(result.imageUrl, `ai-gen/${selectedSessionId}/${Date.now()}.png`);
-                    if (uploadResult) finalImageUrl = uploadResult;
-                }
-
+                // Use the image URL directly (base64 or external URL)
                 await StorageService.updateSessionPendingDesign(selectedSessionId, {
                     originalPrompt: lastClientMessage.content,
-                    imageUrl: finalImageUrl,
+                    imageUrl: result.imageUrl,
                     status: 'generated'
                 });
                 console.log("✅✅✅ [ADMIN] Design saved!");
