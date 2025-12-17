@@ -120,12 +120,12 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 pointer-events-none flex font-sans">
+        <div className="fixed inset-0 z-50 bg-black flex font-sans">
             {/* Sidebar (Original Design) */}
             <div
                 className={cn(
-                    "bg-zinc-950 border-r border-zinc-800 w-80 h-full transform transition-transform duration-300 pointer-events-auto flex flex-col",
-                    isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                    "bg-zinc-950 border-r border-zinc-800 w-80 h-full transform transition-transform duration-300 flex flex-col absolute md:relative z-20",
+                    isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
                 )}
             >
                 <div className="p-6 border-b border-zinc-800 bg-black">
@@ -186,9 +186,9 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             </div>
 
             {/* Main Area */}
-            <div className="flex-1 flex flex-col h-full pointer-events-none relative bg-black">
+            <div className="flex-1 flex flex-col h-full relative bg-black">
                 {/* Top Bar */}
-                <div className="h-16 flex items-center justify-between px-6 pointer-events-auto bg-transparent z-10 w-full">
+                <div className="h-16 flex items-center justify-between px-6 bg-transparent z-10 w-full border-b border-zinc-900">
                     <button
                         onClick={onToggleSidebar}
                         className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
@@ -201,7 +201,7 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                 </div>
 
                 {/* Chat History (New Improved View) */}
-                <div className="absolute inset-0 pt-20 pb-20 px-4 md:px-8 overflow-y-auto pointer-events-auto">
+                <div className="absolute inset-0 pt-20 pb-20 px-4 md:px-8 overflow-y-auto">
                     <div className="max-w-4xl mx-auto space-y-4">
                         {selectedSessionId ? (
                             activeMessages.length > 0 ? (

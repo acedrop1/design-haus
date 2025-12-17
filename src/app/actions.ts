@@ -48,9 +48,9 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             })
         });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error("Google Image/Imagen API Error:", response.status, errText);
+        if (!response.ok || true) { // FORCE MOCK FOR DEBUGGING
+            const errText = !response.ok ? await response.text() : "Debug Mode";
+            console.error("Google Image/Imagen API Error or Debug Fallback:", response.status, errText);
 
             // Helpful logging for the user if their key doesn't have permissions
             if (response.status === 404 || response.status === 400) {
