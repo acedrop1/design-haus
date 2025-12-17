@@ -73,17 +73,15 @@ export function MainLayout() {
     }, [sessionId]);
 
     const handleStart = async () => {
-        setHasStarted(true);
-        if (sessionId) {
-            await StorageService.startSession(sessionId);
+        if (!sessionId) return;
 
-            // Welcome message if empty
-            // Note: We check if messages are empty locally, but service might be async.
-            // Small race condition possible, but acceptable for demo.
-            if (messages.length === 0) {
-                await StorageService.addMessage(sessionId, {
-                    role: 'ai',
-                    content: `Welcome to DesignHaus! 🍬
+        setHasStarted(true);
+
+        // Add intro message FIRST, then mark as started
+        // This guarantees ordering
+        await StorageService.addMessage(sessionId, {
+            role: 'ai',
+            content: `Welcome to DesignHaus! 🍬
 
 We're here to help bring your design ideas to life and ready for **PRINT** in under 10 minutes. You get the file and send it to your print shop.
 
@@ -93,9 +91,9 @@ We're here to help bring your design ideas to life and ready for **PRINT** in un
 3. Send your **Instagram @handle** so we can create a QR code on the design.
 
 Describe your vision, and you'll receive your file! 🍫`
-                });
-            }
-        }
+        });
+
+        await StorageService.startSession(sessionId);
     };
 
     const handleExit = () => {
