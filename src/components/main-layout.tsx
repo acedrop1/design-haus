@@ -29,7 +29,13 @@ export function MainLayout() {
         const initSession = async () => {
             let storedId = localStorage.getItem("designhaus_session_id");
 
-            if (!storedId) {
+            // Verify if this ID actually exists in the current Backend (Mock or Real)
+            let isValid = false;
+            if (storedId) {
+                isValid = await StorageService.verifySession(storedId);
+            }
+
+            if (!storedId || !isValid) {
                 // Create new session via Service
                 storedId = await StorageService.createSession();
                 localStorage.setItem("designhaus_session_id", storedId);

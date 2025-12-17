@@ -10,6 +10,7 @@ import {
     doc,
     updateDoc,
     getDocs,
+    getDoc,
     setDoc,
     Timestamp
 } from "firebase/firestore";
@@ -43,6 +44,20 @@ const USE_MOCK = !isRealEnv; // If not real env, use mock.
 export const StorageService = {
 
     // --- Sessions ---
+
+    async verifySession(sessionId: string): Promise<boolean> {
+        if (USE_MOCK) {
+            const db = getLocalDB();
+            return !!db.sessions[sessionId];
+        }
+        try {
+            const snap = await getDoc(doc(db, "sessions", sessionId));
+            return snap.exists();
+        } catch (e) {
+            console.error("Error verifying session:", e);
+            return false;
+        }
+    },
 
     async createSession() {
         if (USE_MOCK) {
