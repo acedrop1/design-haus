@@ -12,6 +12,51 @@ interface ChatInterfaceProps {
     onExit?: () => void;
 }
 
+// --- Text Formatting Helper (Markdown Subset) ---
+function parseBold(text: string) {
+    // Split by **text**
+    return text.split(/(\*\*.*?\*\*)/g).map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={i} className="font-bold text-[var(--accent-yellow)]">{part.slice(2, -2)}</strong>;
+        }
+        return part;
+    });
+}
+
+function FormattedMessage({ content }: { content: string }) {
+    if (!content) return null;
+    const lines = content.split('\n');
+    const elements: React.ReactNode[] = [];
+    let currentList: React.ReactNode[] = [];
+
+    lines.forEach((line, i) => {
+        const orderedMatch = line.match(/^(\d+)\.\s+(.*)/);
+        if (orderedMatch) {
+            currentList.push(
+                <li key={`li-${i}`} className="ml-4 pl-2 border-l-2 border-zinc-700">
+                    <span className="font-mono text-[10px] text-zinc-500 mr-2">{orderedMatch[1]}.</span>
+                    {parseBold(orderedMatch[2])}
+                </li>
+            );
+        } else {
+            if (currentList.length > 0) {
+                elements.push(<ul key={`list-${i}`} className="space-y-2 my-3">{currentList}</ul>);
+                currentList = [];
+            }
+            if (line.trim() === "") {
+                elements.push(<div key={`br-${i}`} className="h-3" />);
+            } else {
+                elements.push(<p key={`p-${i}`} className="min-h-[1em]">{parseBold(line)}</p>);
+            }
+        }
+    });
+
+    if (currentList.length > 0) {
+        elements.push(<ul key={`list-end`} className="space-y-2 my-3">{currentList}</ul>);
+    }
+    return <>{elements}</>;
+}
+
 export function ChatInterface({ messages, onSendMessage, isReadOnly = false, onExit }: ChatInterfaceProps) {
     const [inputText, setInputText] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -176,7 +221,12 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false, onE
                                 </div>
                             )}
 
-                            {message.content && <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>}
+                            {/* Markdown-ish Rendering */}
+                            {message.content && (
+                                <div className="text-sm md:text-base leading-relaxed">
+                                    <FormattedMessage content={message.content} />
+                                </div>
+                            )}
 
                             {/* Proposal / Design Logic */}
                             {message.imageUrl && (
