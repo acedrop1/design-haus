@@ -155,8 +155,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     // Actions
     const handleGenerateDesign = async () => {
         console.log("🔴 [ADMIN] handleGenerateDesign CALLED");
-        console.log("🔴 [ADMIN] selectedSessionId:", selectedSessionId);
-        console.log("🔴 [ADMIN] activeMessages.length:", activeMessages.length);
 
         if (!selectedSessionId || !activeMessages.length) {
             console.log("❌ [ADMIN] Early return - no session or messages");
@@ -167,34 +165,50 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             .reverse()
             .find(msg => msg.role === 'user');
 
-        console.log("🔴 [ADMIN] lastClientMessage:", lastClientMessage);
-
         if (!lastClientMessage) {
-            console.log("❌ [ADMIN] No client message found");
             alert("No client message found to generate from");
             return;
         }
 
-        console.log("🎨 [ADMIN] About to call generatePackagingDesign with:", lastClientMessage.content);
+        console.log("🎨 [ADMIN] Generating design for:", lastClientMessage.content);
 
         try {
-            const result = await generatePackagingDesign(lastClientMessage.content);
-            console.log("✅ [ADMIN] generatePackagingDesign returned:", result);
+            // 1. Try Client-Side Vertex AI (Imagen 3)
+            let result;
+            try {
+                const { AIService } = await import('@/lib/ai-service');
+                result = await AIService.generateImage(lastClientMessage.content);
+            } catch (clientErr) {
+                console.warn("[ADMIN] Client-side generation failed, trying server:", clientErr);
+                result = { success: false, imageUrl: "" };
+            }
+
+            // 2. Fallback to Server Action (Themed Stock Images)
+            if (!result.success) {
+                console.log("[ADMIN] Using server fallback...");
+                result = await generatePackagingDesign(lastClientMessage.content);
+            }
+
+            console.log("✅ [ADMIN] Generation result:", result);
 
             if (result.success && result.imageUrl) {
-                console.log("✅ [ADMIN] Calling updateSessionPendingDesign...");
+                // Upload to Storage if Base64
+                let finalImageUrl = result.imageUrl;
+                if (result.imageUrl.startsWith('data:')) {
+                    const uploadResult = await handleBase64Upload(result.imageUrl, selectedSessionId);
+                    if (uploadResult) finalImageUrl = uploadResult;
+                }
+
                 await StorageService.updateSessionPendingDesign(selectedSessionId, {
                     originalPrompt: lastClientMessage.content,
-                    imageUrl: result.imageUrl,
+                    imageUrl: finalImageUrl,
                     status: 'generated'
                 });
-                console.log("✅✅✅ [ADMIN] Design generated and saved successfully!");
-            } else {
-                console.warn("⚠️ [ADMIN] Result missing imageUrl:", result);
+                console.log("✅✅✅ [ADMIN] Design saved!");
             }
         } catch (error) {
-            console.error("❌❌❌ [ADMIN] Manual generation failed:", error);
-            alert("Failed to generate design. Check console.");
+            console.error("❌ [ADMIN] Critical Failure:", error);
+            alert("Failed to generate design");
         }
     };
 
