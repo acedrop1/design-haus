@@ -32,11 +32,11 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     const [adminInput, setAdminInput] = useState("");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-    // Log state changes for debugging
+    // Log state changes can be removed or reduced to errors only
     useEffect(() => {
-        console.log("🟡 [STATE] pendingDesign changed:", pendingDesign);
-        console.log("🟡 [STATE] Will render staging area?", !!pendingDesign);
-        console.log("🟡 [STATE] pendingDesign.imageUrl?", pendingDesign?.imageUrl);
+        if (pendingDesign) {
+            console.log("🟡 [STATE] pendingDesign updated:", pendingDesign.status);
+        }
     }, [pendingDesign]);
 
     const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
@@ -196,44 +196,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         }
     };
 
-    const handleTestFlow = async () => {
-        console.log("🧪 [TEST] Starting diagnostic test...");
-        console.log("🧪 [TEST] Step 1: Check selectedSessionId:", selectedSessionId);
-
-        if (!selectedSessionId) {
-            alert("No session selected!");
-            return;
-        }
-
-        console.log("🧪 [TEST] Step 2: Check activeMessages:", activeMessages.length);
-        console.log("🧪 [TEST] Step 3: Current pendingDesign state:", pendingDesign);
-
-        const testDesign = {
-            originalPrompt: "TEST DIAGNOSTIC",
-            imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
-            status: 'generated' as const
-        };
-
-        console.log("🧪 [TEST] Step 4: Calling updateSessionPendingDesign with:", testDesign);
-
-        try {
-            await StorageService.updateSessionPendingDesign(selectedSessionId, testDesign);
-            console.log("✅ [TEST] updateSessionPendingDesign completed");
-            console.log("🧪 [TEST] Step 5: Waiting 2 seconds for listener...");
-
-            setTimeout(() => {
-                console.log("🧪 [TEST] Step 6: Current pendingDesign state after update:", pendingDesign);
-                if (pendingDesign?.imageUrl) {
-                    console.log("✅✅✅ [TEST] SUCCESS! pendingDesign is set in state");
-                } else {
-                    console.log("❌❌❌ [TEST] FAILED! pendingDesign NOT in state after 2s");
-                }
-            }, 2000);
-        } catch (error) {
-            console.error("❌ [TEST] updateSessionPendingDesign failed:", error);
-        }
-    };
-
     const handleRefine = async () => {
         if (!selectedSessionId || !pendingDesign) return;
         await StorageService.updateSessionPendingDesign(selectedSessionId, {
@@ -360,12 +322,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                         >
                             <Wand2 className="w-4 h-4" />
                             Generate Design
-                        </button>
-                        <button
-                            onClick={handleTestFlow}
-                            className="bg-red-600 text-white px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-red-500 transition-colors"
-                        >
-                            TEST FLOW
                         </button>
                     </div>
                     <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
