@@ -38,12 +38,15 @@ const isRealEnv = process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
 
 const USE_MOCK = !isRealEnv; // If not real env, use mock.
 
+// Fallback State
+let USE_FALLBACK = false;
+
 export const StorageService = {
 
     // --- Sessions ---
 
     async verifySession(sessionId: string): Promise<boolean> {
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             return !!db.sessions[sessionId];
         }
@@ -51,13 +54,15 @@ export const StorageService = {
             const snap = await getDoc(doc(db, "sessions", sessionId));
             return snap.exists();
         } catch (e) {
-            console.error("Error verifying session:", e);
+            console.error("Firebase Connection Failed. Switching to Offline/Mock Mode.", e);
+            USE_FALLBACK = true; // GLOBAL FALLBACK TRIGGER
+            // Retry with mock (likely false, but sets the mode for future)
             return false;
         }
     },
 
-    async createSession() {
-        if (USE_MOCK) {
+    async createSession(): Promise<string> {
+        if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             const id = "sess_" + Date.now();
             const newSession: DesignSession = {
@@ -72,16 +77,22 @@ export const StorageService = {
             return id;
         }
         // Real Firebase
-        const ref = await addDoc(collection(db, "sessions"), {
-            clientName: `Client-${Math.floor(Math.random() * 1000)}`,
-            createdAt: serverTimestamp(),
-            started: false
-        });
-        return ref.id;
+        try {
+            const ref = await addDoc(collection(db, "sessions"), {
+                clientName: `Client-${Math.floor(Math.random() * 1000)}`,
+                createdAt: serverTimestamp(),
+                started: false
+            });
+            return ref.id;
+        } catch (error) {
+            console.error("Firebase Create Failed. Switching to Fallback.", error);
+            USE_FALLBACK = true;
+            return this.createSession(); // Retry recursively with fallback enabled
+        }
     },
 
     async startSession(sessionId: string) {
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             if (db.sessions[sessionId]) {
                 db.sessions[sessionId].started = true;
@@ -93,7 +104,7 @@ export const StorageService = {
     },
 
     updateSessionPendingDesign(sessionId: string, pendingDesign: unknown) {
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             if (db.sessions[sessionId]) {
                 db.sessions[sessionId].pendingDesign = pendingDesign;
@@ -114,10 +125,10 @@ export const StorageService = {
     async addMessage(sessionId: string, message: Partial<Message>) {
         const finalMessage = {
             ...message,
-            timestamp: USE_MOCK ? new Date() : serverTimestamp()
+            timestamp: (USE_MOCK || USE_FALLBACK) ? new Date() : serverTimestamp()
         };
 
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             const id = "msg_" + Date.now();
 
@@ -133,7 +144,7 @@ export const StorageService = {
     },
 
     async updateMessage(sessionId: string, messageId: string, updates: Partial<Message>) {
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             if (db.messages[sessionId] && db.messages[sessionId][messageId]) {
                 db.messages[sessionId][messageId] = { ...db.messages[sessionId][messageId], ...updates };
@@ -147,7 +158,9 @@ export const StorageService = {
     // --- Listeners (The Tricky Part) ---
 
     subscribeToSession(sessionId: string, callback: (data: any) => void) {
-        if (USE_MOCK) {
+        // We can't easily auto-switch inside a listener setup because it returns an unsubscribe function.
+        // But if USE_FALLBACK is already true, we use the mock.
+        if (USE_MOCK || USE_FALLBACK) {
             // Poll or Listener
             const check = () => {
                 const db = getLocalDB();
@@ -169,13 +182,20 @@ export const StorageService = {
         }
 
         // Firebase
-        return onSnapshot(doc(db, "sessions", sessionId), (doc) => {
-            if (doc.exists()) callback(doc.data());
-        });
+        try {
+            return onSnapshot(doc(db, "sessions", sessionId), (doc) => {
+                if (doc.exists()) callback(doc.data());
+            });
+        } catch (e) {
+            console.error("Firebase Listen Failed (Session)", e);
+            USE_FALLBACK = true;
+            // Return empty unsub (we can't easily restart the mock listener here without a reload, but writes will work)
+            return () => { };
+        }
     },
 
     subscribeToMessages(sessionId: string, callback: (messages: Message[]) => void) {
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const check = () => {
                 const db = getLocalDB();
                 const msgsObj = db.messages[sessionId] || {};
@@ -210,7 +230,7 @@ export const StorageService = {
     },
 
     subscribeToAllSessions(callback: (sessions: DesignSession[]) => void) {
-        if (USE_MOCK) {
+        if (USE_MOCK || USE_FALLBACK) {
             const check = () => {
                 const db = getLocalDB();
                 const sess = Object.values(db.sessions).sort((a, b) => {

@@ -38,9 +38,9 @@ export function MainLayout() {
             if (!storedId || !isValid) {
                 // Create new session via Service
                 storedId = await StorageService.createSession();
-                localStorage.setItem("designhaus_session_id", storedId);
+                if (storedId) localStorage.setItem("designhaus_session_id", storedId);
             }
-            setSessionId(storedId);
+            if (storedId) setSessionId(storedId);
         };
 
         if (typeof window !== 'undefined') {
@@ -150,38 +150,36 @@ Describe your vision, and you'll receive your file! 🍫`
     const handleSendMessage = async (text: string, attachments: Attachment[], audioUrl?: string) => {
         if (!sessionId) return;
 
+        // 1. Write User Message to Service (Critical - must succeed)
         try {
-            // 1. Write User Message to Service
             await StorageService.addMessage(sessionId, {
                 role: 'user',
                 content: text,
                 audioUrl: audioUrl || undefined,
                 attachments: attachments
             });
-
-            // 2. Trigger AI (Optimistic - don't block UI if this fails)
-            const prompt = audioUrl ? `[Voice Note: ${text}]` : text;
-            const finalPrompt = attachments.length > 0 ? `[Attachments] ${prompt}` : prompt;
-
-            try {
-                const result = await generatePackagingDesign(finalPrompt);
-                if (result.success && result.imageUrl) {
-                    await StorageService.updateSessionPendingDesign(sessionId, {
-                        originalPrompt: finalPrompt,
-                        imageUrl: result.imageUrl,
-                        status: 'generated'
-                    });
-                }
-            } catch (aiError) {
-                console.error("AI Generation Failed silently:", aiError);
-                // We do NOT alert here because the user's message was sent successfully.
-                // Admin just won't see a generated design immediately.
-            }
-
         } catch (error) {
-            console.error("Message Send/AI Error:", error);
-            // Silent fail for AI, user message is already optimistic
+            console.error("CRITICAL: Message Send Failed:", error);
             alert("Could not send message. Please check your connection.");
+            return; // Stop here if message fails
+        }
+
+        // 2. Trigger AI (Optional - don't block if this fails)
+        const prompt = audioUrl ? `[Voice Note: ${text}]` : text;
+        const finalPrompt = attachments.length > 0 ? `[Attachments] ${prompt}` : prompt;
+
+        try {
+            const result = await generatePackagingDesign(finalPrompt);
+            if (result.success && result.imageUrl) {
+                await StorageService.updateSessionPendingDesign(sessionId, {
+                    originalPrompt: finalPrompt,
+                    imageUrl: result.imageUrl,
+                    status: 'generated'
+                });
+            }
+        } catch (aiError) {
+            console.error("AI Generation Failed (non-critical):", aiError);
+            // Silent fail - user's message was already sent successfully
         }
     };
 
