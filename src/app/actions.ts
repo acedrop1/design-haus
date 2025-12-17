@@ -16,6 +16,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
 
     try {
         const apiKey = process.env.GOOGLE_API_KEY;
+        const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 
         if (!apiKey) {
             console.warn("[SERVER] No GOOGLE_API_KEY found, using fallback");
@@ -26,55 +27,49 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             };
         }
 
-        // Try Vertex AI Imagen 3 (Google's official image generation)
-        console.log("[SERVER] Using Vertex AI Imagen 3");
+        // Try direct Imagen API (works with API key)
+        if (projectId) {
+            console.log("[SERVER] Trying Vertex AI Imagen via REST API");
 
-        const { VertexAI } = await import('@google-cloud/vertexai');
+            const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/imagen-3.0-generate-001:predict`;
 
-        // Initialize Vertex AI with API key authentication
-        const vertexAI = new VertexAI({
-            project: process.env.GOOGLE_CLOUD_PROJECT || 'your-project-id',
-            location: 'us-central1',
-        });
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    instances: [{
+                        prompt: enhancedPrompt
+                    }],
+                    parameters: {
+                        sampleCount: 1,
+                        aspectRatio: "4:5",
+                        safetyFilterLevel: "block_some",
+                        personGeneration: "allow_adult"
+                    }
+                })
+            });
 
-        const model = vertexAI.preview.getGenerativeModel({
-            model: 'imagen-3.0-generate-001',
-        });
-
-        const result = await model.generateContent({
-            contents: [{
-                role: 'user',
-                parts: [{
-                    text: enhancedPrompt
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.4,
-                topP: 0.95,
-                topK: 32,
-                maxOutputTokens: 2048,
-            }
-        });
-
-        const response = result.response;
-        const candidates = response.candidates;
-
-        if (candidates && candidates[0]) {
-            const parts = candidates[0].content.parts;
-            const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image'));
-
-            if (imagePart && imagePart.inlineData) {
-                console.log("[SERVER] Successfully generated image with Imagen 3");
-                return {
-                    success: true,
-                    imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
-                    isMock: false
-                };
+            if (response.ok) {
+                const data = await response.json();
+                if (data.predictions && data.predictions[0]?.bytesBase64Encoded) {
+                    console.log("[SERVER] Successfully generated image with Imagen 3");
+                    return {
+                        success: true,
+                        imageUrl: `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`,
+                        isMock: false
+                    };
+                }
+            } else {
+                const errorText = await response.text();
+                console.warn("[SERVER] Imagen API error:", response.status, errorText);
             }
         }
 
-        // If Vertex AI fails, fall back to themed images
-        console.warn("[SERVER] Vertex AI didn't return image, using themed fallback");
+        // Fallback to themed images
+        console.log("[SERVER] Using themed fallback images");
 
         const themeImages: Record<string, string> = {
             "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
