@@ -417,8 +417,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                 </div>
 
                 {/* Staging Area (Original Sidebar Overlay Style) */}
-                {console.log("🎯 [RENDER] pendingDesign value:", pendingDesign)}
-                {console.log("🎯 [RENDER] Will show staging area?", !!pendingDesign)}
                 {pendingDesign && (
                     <div className="absolute top-20 right-8 w-96 bg-zinc-900/95 backdrop-blur-md border border-[var(--accent-yellow)]/30 rounded-xl shadow-2xl overflow-hidden flex flex-col z-30">
                         <div className="p-3 bg-black border-b border-zinc-800 flex justify-between items-center">
