@@ -60,7 +60,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             // FALLBACK TO MOCK
             return {
                 success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+                imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
                 isMock: true,
                 error: `API Call Failed: ${response.status}`
             };
@@ -86,11 +86,10 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             };
         }
 
-    } catch (error) {
         console.error("[SERVER] Generation logic failed:", error);
         return {
             success: true,
-            imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+            imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
             isMock: true,
             error: String(error)
         };
