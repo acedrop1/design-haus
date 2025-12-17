@@ -142,33 +142,46 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
 
     // Actions
     const handleGenerateDesign = async () => {
-        if (!selectedSessionId || !activeMessages.length) return;
+        console.log("🔴 [ADMIN] handleGenerateDesign CALLED");
+        console.log("🔴 [ADMIN] selectedSessionId:", selectedSessionId);
+        console.log("🔴 [ADMIN] activeMessages.length:", activeMessages.length);
+
+        if (!selectedSessionId || !activeMessages.length) {
+            console.log("❌ [ADMIN] Early return - no session or messages");
+            return;
+        }
 
         const lastClientMessage = [...activeMessages]
             .reverse()
             .find(msg => msg.role === 'user');
 
+        console.log("🔴 [ADMIN] lastClientMessage:", lastClientMessage);
+
         if (!lastClientMessage) {
+            console.log("❌ [ADMIN] No client message found");
             alert("No client message found to generate from");
             return;
         }
 
-        console.log("🎨 [ADMIN] Manual generate triggered for:", lastClientMessage.content);
+        console.log("🎨 [ADMIN] About to call generatePackagingDesign with:", lastClientMessage.content);
 
         try {
             const result = await generatePackagingDesign(lastClientMessage.content);
-            console.log("🎨 [ADMIN] AI Result:", result);
+            console.log("✅ [ADMIN] generatePackagingDesign returned:", result);
 
             if (result.success && result.imageUrl) {
+                console.log("✅ [ADMIN] Calling updateSessionPendingDesign...");
                 await StorageService.updateSessionPendingDesign(selectedSessionId, {
                     originalPrompt: lastClientMessage.content,
                     imageUrl: result.imageUrl,
                     status: 'generated'
                 });
-                console.log("✅ [ADMIN] Design generated and saved");
+                console.log("✅✅✅ [ADMIN] Design generated and saved successfully!");
+            } else {
+                console.warn("⚠️ [ADMIN] Result missing imageUrl:", result);
             }
         } catch (error) {
-            console.error("❌ [ADMIN] Manual generation failed:", error);
+            console.error("❌❌❌ [ADMIN] Manual generation failed:", error);
             alert("Failed to generate design. Check console.");
         }
     };
