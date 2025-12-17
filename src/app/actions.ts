@@ -28,59 +28,63 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
         Object: Physical product box or pouch. 
         Lighting: Studio lighting, 4k, photorealistic.`;
 
-        // Using Imagen via Generative Language API
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+        // Using Gemini 2.0 Flash Image Generation (as confirmed available in logs)
+        const modelId = "gemini-2.0-flash-exp"; // or "gemini-2.0-flash-exp-image-generation"
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:predict?key=${apiKey}`;
+
+        // Gemini 2.0 Payload Structure
+        const payload = {
+            instances: [
+                {
+                    prompt: enhancedPrompt
+                }
+            ],
+            parameters: {
+                sampleCount: 1,
+                aspectRatio: "4:5",
+                personGeneration: "allow_adult" // Optional, but often needed for lifestyle shots
+            }
+        };
+
+        console.log(`[SERVER] Calling model: ${modelId}`);
 
         const response = await fetch(url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                instances: [
-                    {
-                        prompt: enhancedPrompt
-                    }
-                ],
-                parameters: {
-                    sampleCount: 1,
-                    aspectRatio: "4:5"
-                }
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
             const errText = await response.text();
-            console.error("[SERVER] Google Imagen API Error:", response.status, errText);
-
-            if (response.status === 404 || response.status === 400) {
-                console.warn("[SERVER] Model not accessible. Falling back to mock.");
-            }
+            console.error(`[SERVER] ${modelId} API Error:`, response.status, errText);
 
             // FALLBACK TO MOCK
             return {
                 success: true,
                 imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
                 isMock: true,
-                error: `API Call Failed: ${response.status}`
+                error: `API Call Failed: ${response.status} - ${errText}`
             };
         }
 
         const data = await response.json();
 
+        // Check for Gemini 2.0 response structure (usually similar to Imagen)
         if (data.predictions && data.predictions[0] && data.predictions[0].bytesBase64Encoded) {
             const base64Image = data.predictions[0].bytesBase64Encoded;
-            console.log("[SERVER] Successfully generated image with Imagen 3");
+            console.log(`[SERVER] Successfully generated image with ${modelId}`);
             return {
                 success: true,
                 imageUrl: `data:image/png;base64,${base64Image}`,
                 isMock: false
             };
         } else {
-            console.warn("[SERVER] Unexpected API response structure:", data);
+            console.warn("[SERVER] Unexpected API response structure:", JSON.stringify(data).slice(0, 200));
             return {
                 success: true,
-                imageUrl: "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=2670&auto=format&fit=crop",
+                imageUrl: "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=600&auto=format&fit=crop",
                 isMock: true,
                 error: "Invalid API response structure"
             };
