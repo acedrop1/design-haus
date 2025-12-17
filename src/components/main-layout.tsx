@@ -121,31 +121,37 @@ Describe your vision, and you'll receive your file! 🍫`
     const handleSendMessage = async (text: string, attachments: Attachment[], audioUrl?: string) => {
         if (!sessionId) return;
 
-        // 1. Write User Message to Service
-        await StorageService.addMessage(sessionId, {
-            role: 'user',
-            content: text,
-            audioUrl: audioUrl || undefined,
-            attachments: attachments
-        });
-
-        // 2. Trigger AI
         try {
+            // 1. Write User Message to Service
+            await StorageService.addMessage(sessionId, {
+                role: 'user',
+                content: text,
+                audioUrl: audioUrl || undefined,
+                attachments: attachments
+            });
+
+            // 2. Trigger AI (Optimistic - don't block UI if this fails)
             const prompt = audioUrl ? `[Voice Note: ${text}]` : text;
-            // Also consider attachments in prompt context ideally
             const finalPrompt = attachments.length > 0 ? `[Attachments] ${prompt}` : prompt;
 
-            const result = await generatePackagingDesign(finalPrompt);
-            if (result.success && result.imageUrl) {
-                // Update Session with Pending Design
-                StorageService.updateSessionPendingDesign(sessionId, {
-                    originalPrompt: finalPrompt,
-                    imageUrl: result.imageUrl,
-                    status: 'generated'
-                });
+            try {
+                const result = await generatePackagingDesign(finalPrompt);
+                if (result.success && result.imageUrl) {
+                    await StorageService.updateSessionPendingDesign(sessionId, {
+                        originalPrompt: finalPrompt,
+                        imageUrl: result.imageUrl,
+                        status: 'generated'
+                    });
+                }
+            } catch (aiError) {
+                console.error("AI Generation Failed silently:", aiError);
+                // We do NOT alert here because the user's message was sent successfully.
+                // Admin just won't see a generated design immediately.
             }
-        } catch (e) {
-            console.error(e);
+
+        } catch (e: any) {
+            console.error("Message Send Error:", e);
+            alert("Could not send message. Please check your connection.");
         }
     };
 

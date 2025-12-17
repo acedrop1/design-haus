@@ -229,13 +229,24 @@ export const StorageService = {
             };
         }
 
-        const q = query(collection(db, "sessions"), orderBy("createdAt", "desc"));
-        return onSnapshot(q, (snapshot) => {
+        // Firebase - Remove OrderBy to prevent "Missing Index" failures
+        return onSnapshot(collection(db, "sessions"), (snapshot) => {
             const sess = snapshot.docs.map(d => ({
                 id: d.id,
                 ...d.data()
             })) as DesignSession[];
-            callback(sess);
+
+            // Client-side sort
+            const sorted = sess.sort((a, b) => {
+                // Handle standard Date object or Firestore Timestamp
+                // @ts-ignore
+                const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+                // @ts-ignore
+                const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+                return timeB - timeA;
+            });
+
+            callback(sorted);
         });
     }
 };
