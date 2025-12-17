@@ -70,7 +70,7 @@ export function LandingPage({ onStart, onAdminLogin }: LandingPageProps) {
             <div className="absolute bottom-1/4 right-10 w-32 h-32 border border-[var(--accent-yellow)]/20 rounded-full animate-float-delayed opacity-50 block blur-sm" />
             {/* Version Indicator for Deployment Verification */}
             <div className="absolute bottom-2 left-4 text-[10px] text-zinc-800 pointer-events-none">
-                v0.6.2 (Live Build)
+                v0.7.0 (Live Build)
             </div>
         </div>
     );

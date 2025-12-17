@@ -39,6 +39,12 @@ const isRealEnv = process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
 
 const USE_MOCK = !isRealEnv; // If not real env, use mock.
 
+// Log mode on initialization
+if (typeof window !== 'undefined') {
+    console.log("🚨 [STORAGE] Mode:", USE_MOCK ? "MOCK (LocalStorage)" : "FIREBASE (Real-time)");
+    console.log("🚨 [STORAGE] Firebase API Key:", process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? "SET" : "NOT SET");
+}
+
 // Fallback State
 let USE_FALLBACK = false;
 
