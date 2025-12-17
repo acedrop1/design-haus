@@ -173,29 +173,14 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         console.log("🎨 [ADMIN] Generating design for:", lastClientMessage.content);
 
         try {
-            // 1. Try Client-Side Vertex AI (Imagen 3)
-            let result;
-            try {
-                const { AIService } = await import('@/lib/ai-service');
-                result = await AIService.generateImage(lastClientMessage.content);
-            } catch (clientErr) {
-                console.warn("[ADMIN] Client-side generation failed, trying server:", clientErr);
-                result = { success: false, imageUrl: "" };
-            }
-
-            // 2. Fallback to Server Action (Themed Stock Images)
-            if (!result.success) {
-                console.log("[ADMIN] Using server fallback...");
-                result = await generatePackagingDesign(lastClientMessage.content);
-            }
-
+            const result = await generatePackagingDesign(lastClientMessage.content);
             console.log("✅ [ADMIN] Generation result:", result);
 
             if (result.success && result.imageUrl) {
                 // Upload to Storage if Base64
                 let finalImageUrl = result.imageUrl;
                 if (result.imageUrl.startsWith('data:')) {
-                    const uploadResult = await handleBase64Upload(result.imageUrl, selectedSessionId);
+                    const uploadResult = await uploadBase64Image(result.imageUrl, `ai-gen/${selectedSessionId}/${Date.now()}.png`);
                     if (uploadResult) finalImageUrl = uploadResult;
                 }
 
