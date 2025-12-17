@@ -229,9 +229,7 @@ Describe your vision, and you'll receive your file! 🍫`
 
                 {isAdminMode && (
                     <AdminDashboard
-                        currentSessionId={sessionId}
-                        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-                        isSidebarOpen={isSidebarOpen}
+                        currentSessionId={sessionId || ""}
                     />
                 )}
             </div>
