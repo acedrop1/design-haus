@@ -34,10 +34,11 @@ function saveLocalDB(data: any) {
 }
 
 // Helper to determine if we should use Firebase or Mock
-// For this specific User Request ("local host isn't opening" / "nothing showing"),
-// we force MOCK mode if we detect the mock keys or if explicitly requested.
-// We will default to MOCK for localhost stability unless keys act real.
-const USE_MOCK = true; // FORCE MOCK FOR STABILITY
+// We check if the API key is present and not the mock default string.
+const isRealEnv = process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+    !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_");
+
+const USE_MOCK = !isRealEnv; // If not real env, use mock.
 
 export const StorageService = {
 
