@@ -3,12 +3,12 @@ import { vertexAI } from "./firebase";
 
 export const AIService = {
     async generateImage(prompt: string): Promise<{ success: boolean; imageUrl: string; error?: string }> {
-        console.log("🎨 [CLIENT] Generating image with Firebase Vertex AI (Imagen 3.0 Generate 002)");
+        console.log("🎨 [CLIENT] Generating image with Firebase Vertex AI (Imagen 3.0 Generate 001)");
 
         try {
-            // Initialize Imagen 3 model (High Quality version)
+            // Initialize Imagen 3 model (Stable version)
             const model = getImagenModel(vertexAI, {
-                model: "imagen-3.0-generate-002"
+                model: "imagen-3.0-generate-001"
             });
 
             const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. Modern, sleek, industrial aesthetic, bold typography. Physical product box or pouch on clean background. Studio lighting, 4k, photorealistic, professional product shot.`;
