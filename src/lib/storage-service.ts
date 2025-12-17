@@ -9,7 +9,8 @@ import {
     serverTimestamp,
     doc,
     updateDoc,
-    getDoc
+    getDoc,
+    getDocs
 } from "firebase/firestore";
 
 // --- Mock Data Structure for LocalStorage ---
@@ -227,6 +228,22 @@ export const StorageService = {
             })) as Message[];
             callback(msgs);
         });
+    },
+
+    // --- One-off Fetch ---
+    async getAllSessions(): Promise<DesignSession[]> {
+        if (USE_MOCK || USE_FALLBACK) {
+            const db = getLocalDB();
+            const sess = Object.values(db.sessions);
+            return sess as DesignSession[];
+        }
+
+        // Firebase
+        const snapshot = await getDocs(collection(db, "sessions"));
+        return snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+        })) as DesignSession[];
     },
 
     subscribeToAllSessions(callback: (sessions: DesignSession[]) => void) {
