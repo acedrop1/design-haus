@@ -217,86 +217,86 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false, onE
 
                             <div className="text-[10px] uppercase tracking-widest text-zinc-500 mt-2 text-right">
                                 {message.role === 'user' ? 'Client' : 'DesignHaus'}
-                            </div>              </div>
-                    </div>
+                            </div>
+                        </div>
                     </div>
                 ))}
-            <div ref={messagesEndRef} />
-        </div>
+                <div ref={messagesEndRef} />
+            </div>
 
-            {/* Input Area */ }
-    {
-        !isReadOnly && (
-            <div className="p-4 md:p-6 bg-black border-t border-white/10">
-                {/* Pending Attachments Preview */}
-                {tempAttachments.length > 0 && (
-                    <div className="flex gap-2 px-2 pb-2 overflow-x-auto">
-                        {tempAttachments.map((att, i) => (
-                            <div key={i} className="relative bg-zinc-800 p-1 rounded">
-                                {att.type === 'image' ? (
-                                    <img src={att.url} className="w-10 h-10 object-cover rounded" alt="prev" />
-                                ) : (
-                                    <FileText className="w-10 h-10 p-2 text-zinc-400" />
-                                )}
-                                <button onClick={() => setTempAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center text-[10px]">×</button>
+            {/* Input Area */}
+            {
+                !isReadOnly && (
+                    <div className="p-4 md:p-6 bg-black border-t border-white/10">
+                        {/* Pending Attachments Preview */}
+                        {tempAttachments.length > 0 && (
+                            <div className="flex gap-2 px-2 pb-2 overflow-x-auto">
+                                {tempAttachments.map((att, i) => (
+                                    <div key={i} className="relative bg-zinc-800 p-1 rounded">
+                                        {att.type === 'image' ? (
+                                            <img src={att.url} className="w-10 h-10 object-cover rounded" alt="prev" />
+                                        ) : (
+                                            <FileText className="w-10 h-10 p-2 text-zinc-400" />
+                                        )}
+                                        <button onClick={() => setTempAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center text-[10px]">×</button>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                )}
-
-                <div className="max-w-4xl mx-auto flex items-end gap-3 bg-zinc-900/50 p-2 rounded-2xl border border-white/5 focus-within:border-[var(--accent-yellow)]/50 transition-colors">
-
-                    {/* Attachments Input */}
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        onChange={handleFileSelect}
-                        accept="image/*,.pdf,.doc,.docx" // Broad acceptance
-                    />
-                    <button
-                        onClick={handlePaperclipClick}
-                        className="p-3 text-zinc-400 hover:text-white transition-colors"
-                    >
-                        <Paperclip className="w-5 h-5" />
-                    </button>
-
-                    {/* Mic Button */}
-                    <button
-                        onClick={isRecording ? stopRecording : startRecording}
-                        className={cn(
-                            "p-3 rounded-xl transition-all duration-300",
-                            isRecording
-                                ? "bg-red-500/20 text-red-500 animate-pulse"
-                                : "text-zinc-400 hover:text-white"
                         )}
-                    >
-                        {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
-                    </button>
 
-                    <textarea
-                        value={inputText}
-                        onChange={(e) => setInputText(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder={isRecording ? "Listening..." : "Describe your packaging concept..."}
-                        disabled={isRecording}
-                        className="flex-1 bg-transparent border-none text-white placeholder-zinc-500 focus:ring-0 resize-none py-3 max-h-32"
-                        rows={1}
-                    />
-                    <button
-                        onClick={handleSend}
-                        disabled={!inputText.trim() && !isRecording && tempAttachments.length === 0}
-                        className="p-3 bg-[var(--accent-yellow)] text-black rounded-xl hover:bg-white disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all"
-                    >
-                        <Send className="w-5 h-5" />
-                    </button>
-                </div>
-                <p className="text-center text-[10px] text-zinc-600 mt-3 uppercase tracking-widest">
-                    DesignHaus Concept Generation. Professional Review Required.
-                </p>          </p>
-                </div >
-            )
-    }
+                        <div className="max-w-4xl mx-auto flex items-end gap-3 bg-zinc-900/50 p-2 rounded-2xl border border-white/5 focus-within:border-[var(--accent-yellow)]/50 transition-colors">
+
+                            {/* Attachments Input */}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                onChange={handleFileSelect}
+                                accept="image/*,.pdf,.doc,.docx" // Broad acceptance
+                            />
+                            <button
+                                onClick={handlePaperclipClick}
+                                className="p-3 text-zinc-400 hover:text-white transition-colors"
+                            >
+                                <Paperclip className="w-5 h-5" />
+                            </button>
+
+                            {/* Mic Button */}
+                            <button
+                                onClick={isRecording ? stopRecording : startRecording}
+                                className={cn(
+                                    "p-3 rounded-xl transition-all duration-300",
+                                    isRecording
+                                        ? "bg-red-500/20 text-red-500 animate-pulse"
+                                        : "text-zinc-400 hover:text-white"
+                                )}
+                            >
+                                {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
+                            </button>
+
+                            <textarea
+                                value={inputText}
+                                onChange={(e) => setInputText(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder={isRecording ? "Listening..." : "Describe your packaging concept..."}
+                                disabled={isRecording}
+                                className="flex-1 bg-transparent border-none text-white placeholder-zinc-500 focus:ring-0 resize-none py-3 max-h-32"
+                                rows={1}
+                            />
+                            <button
+                                onClick={handleSend}
+                                disabled={!inputText.trim() && !isRecording && tempAttachments.length === 0}
+                                className="p-3 bg-[var(--accent-yellow)] text-black rounded-xl hover:bg-white disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all"
+                            >
+                                <Send className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <p className="text-center text-[10px] text-zinc-600 mt-3 uppercase tracking-widest">
+                            DesignHaus Concept Generation. Professional Review Required.
+                        </p>
+                    </div>
+                )
+            }
         </div >
     );
 }

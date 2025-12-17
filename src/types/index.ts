@@ -1,4 +1,3 @@
-```typescript
 import { Timestamp } from 'firebase/firestore';
 
 export type Role = 'user' | 'ai' | 'admin';
@@ -36,4 +35,3 @@ export interface DesignSession {
         status: 'generated' | 'refined';
     } | null;
 }
-```
