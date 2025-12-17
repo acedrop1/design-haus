@@ -104,20 +104,26 @@ export const StorageService = {
         await updateDoc(doc(db, "sessions", sessionId), { started: true });
     },
 
-    updateSessionPendingDesign(sessionId: string, pendingDesign: unknown) {
+    async updateSessionPendingDesign(sessionId: string, pendingDesign: unknown) {
         if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
-            if (db.sessions[sessionId]) {
-                db.sessions[sessionId].pendingDesign = pendingDesign;
-                saveLocalDB(db);
+            if (!db.sessions[sessionId]) {
+                console.error("[STORAGE] Session not found in mock DB:", sessionId);
+                return;
             }
+            db.sessions[sessionId].pendingDesign = pendingDesign;
+            saveLocalDB(db);
+            console.log("[STORAGE] Mock: pendingDesign updated");
             return;
         }
-        // Firebase
-        if (pendingDesign === null) {
-            updateDoc(doc(db, "sessions", sessionId), { pendingDesign: null });
-        } else {
-            updateDoc(doc(db, "sessions", sessionId), { pendingDesign });
+
+        try {
+            console.log("[STORAGE] Updating Firestore pendingDesign for session:", sessionId);
+            await updateDoc(doc(db, "sessions", sessionId), { pendingDesign });
+            console.log("[STORAGE] Firestore: pendingDesign updated successfully");
+        } catch (error) {
+            console.error("[STORAGE] Failed to update pendingDesign:", error);
+            throw error;
         }
     },
 
