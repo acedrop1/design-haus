@@ -29,7 +29,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
         Lighting: Studio lighting, 4k, photorealistic.`;
 
         // Using Gemini 2.0 Flash Image Generation (as confirmed available in logs)
-        const modelId = "gemini-2.0-flash-exp"; // or "gemini-2.0-flash-exp-image-generation"
+        const modelId = "gemini-2.0-flash-exp-image-generation"; // Correct ID from logs (Index 6)
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:predict?key=${apiKey}`;
 
         // Gemini 2.0 Payload Structure
