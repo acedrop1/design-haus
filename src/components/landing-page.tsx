@@ -68,6 +68,10 @@ export function LandingPage({ onStart, onAdminLogin }: LandingPageProps) {
             {/* Decorative 3D-ish Elements */}
             <div className="absolute top-1/4 left-10 w-24 h-24 border border-white/10 rounded-full animate-float opacity-50 block blur-sm" />
             <div className="absolute bottom-1/4 right-10 w-32 h-32 border border-[var(--accent-yellow)]/20 rounded-full animate-float-delayed opacity-50 block blur-sm" />
+            {/* Version Indicator for Deployment Verification */}
+            <div className="absolute bottom-2 left-4 text-[10px] text-zinc-800 pointer-events-none">
+                v0.2.0 (Live Build)
+            </div>
         </div>
     );
 }
