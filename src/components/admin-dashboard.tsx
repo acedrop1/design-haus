@@ -107,7 +107,20 @@ export function AdminDashboard({
             >
                 <div className="p-6 border-b border-zinc-800 bg-black">
                     <h2 className="text-[var(--accent-yellow)] font-bold text-xl uppercase tracking-tighter">Admin Console</h2>
-                    <p className="text-zinc-500 text-xs mt-1">DesignHaus Internal v2.5</p>
+                    <p className="text-zinc-500 text-xs mt-1 mb-2">DesignHaus Internal v2.5</p>
+                    {/* Connection Status Indicator */}
+                    <div className="flex items-center gap-2">
+                        <div className={cn("w-2 h-2 rounded-full animate-pulse",
+                            process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
+                                ? "bg-green-500"
+                                : "bg-red-500"
+                        )} />
+                        <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
+                            {process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("mock_")
+                                ? "System: Online"
+                                : "System: Local Mode"}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
