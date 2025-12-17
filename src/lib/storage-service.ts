@@ -12,7 +12,6 @@ import {
     getDoc,
     getDocs
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // --- Mock Data Structure for LocalStorage ---
 // Key: "designhaus_db"
@@ -20,67 +19,17 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const LOCAL_STORAGE_KEY = "designhaus_db";
 
-interface MockDB {
-    sessions: { [id: string]: DesignSession };
-    messages: { [sessionId: string]: { [msgId: string]: Message } };
-}
-
-function getLocalDB(): MockDB {
+function getLocalDB() {
     if (typeof window === 'undefined') return { sessions: {}, messages: {} };
     const data = localStorage.getItem(LOCAL_STORAGE_KEY);
     return data ? JSON.parse(data) : { sessions: {}, messages: {} };
 }
 
-function saveLocalDB(db: MockDB) {
-    if (typeof window !== 'undefined') {
-        try {
-            const data = JSON.stringify(db);
-            // Check approximate size (UTF-16 chars are 2 bytes, but localStorage counts character length)
-            if (data.length > 4500000) { // 4.5M chars is getting close to the 5MB limit
-                console.warn("[STORAGE] Mock DB is getting large. Purging old sessions...");
-                const sessionIds = Object.keys(db.sessions).sort((a, b) =>
-                    new Date(db.sessions[a].createdAt || 0).getTime() - new Date(db.sessions[b].createdAt || 0).getTime()
-                );
-                // Remove oldest half
-                const toRemove = sessionIds.slice(0, Math.floor(sessionIds.length / 2));
-                toRemove.forEach(id => {
-                    delete db.sessions[id];
-                    delete db.messages[id];
-                });
-                // Recursive call with smaller DB, but ensure it doesn't loop infinitely if purge doesn't help enough
-                // For simplicity, we'll just try once more.
-                if (toRemove.length > 0) {
-                    console.log(`[STORAGE] Purged ${toRemove.length} old sessions.`);
-                    return saveLocalDB(db);
-                } else {
-                    console.error("[STORAGE] Could not purge enough data. LocalStorage might be full.");
-                }
-            }
-            localStorage.setItem(LOCAL_STORAGE_KEY, data);
-        } catch (e) {
-            console.error("[STORAGE] LocalStorage Save Failed:", e);
-            // If quota exceeded, try to purge and save again
-            if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-                console.warn("[STORAGE] QuotaExceededError. Attempting to purge and retry save.");
-                const sessionIds = Object.keys(db.sessions).sort((a, b) =>
-                    new Date(db.sessions[a].createdAt || 0).getTime() - new Date(db.sessions[b].createdAt || 0).getTime()
-                );
-                const toRemove = sessionIds.slice(0, Math.floor(sessionIds.length / 2));
-                if (toRemove.length > 0) {
-                    toRemove.forEach(id => {
-                        delete db.sessions[id];
-                        delete db.messages[id];
-                    });
-                    console.log(`[STORAGE] Purged ${toRemove.length} old sessions due to QuotaExceededError.`);
-                    return saveLocalDB(db); // Retry
-                } else {
-                    console.error("[STORAGE] QuotaExceededError and no sessions to purge or purge failed.");
-                }
-            }
-        }
-        // Dispatch event for other tabs/components to react
-        window.dispatchEvent(new Event('storage-update'));
-    }
+function saveLocalDB(data: unknown) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    // Dispatch event for other tabs/components to react
+    window.dispatchEvent(new Event('storage-update'));
 }
 
 // Helper to determine if we should use Firebase or Mock
@@ -161,17 +110,7 @@ export const StorageService = {
         await updateDoc(doc(db, "sessions", sessionId), { started: true });
     },
 
-    async updateSessionPendingDesign(sessionId: string, pendingDesign: any) {
-        // Validation: Ensure we're not saving massive base64 strings to Firestore
-        if (pendingDesign && pendingDesign.imageUrl && pendingDesign.imageUrl.startsWith('data:') && pendingDesign.imageUrl.length > 500000) {
-            console.error("[STORAGE] Attempted to save a massive base64 image (>0.5MB) to Firestore. This will fail.");
-            // We should have uploaded this to Storage already.
-            // If we're here, it means upload failed.
-            if (!USE_MOCK && !USE_FALLBACK) {
-                throw new Error("Image too large for database. Storage upload must succeed.");
-            }
-        }
-
+    async updateSessionPendingDesign(sessionId: string, pendingDesign: unknown) {
         if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             if (!db.sessions[sessionId]) {
@@ -196,29 +135,23 @@ export const StorageService = {
 
     // --- Messages ---
 
-    async addMessage(sessionId: string, data: Partial<Message>) {
+    async addMessage(sessionId: string, message: Partial<Message>) {
+        const finalMessage = {
+            ...message,
+            timestamp: (USE_MOCK || USE_FALLBACK) ? new Date() : serverTimestamp()
+        };
+
         if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             const id = "msg_" + Date.now();
 
-            const finalMessage: Message = {
-                id,
-                role: data.role || 'user',
-                content: data.content || '',
-                timestamp: new Date(),
-                ...data
-            };
+            finalMessage.id = id;
 
             if (!db.messages[sessionId]) db.messages[sessionId] = {};
             db.messages[sessionId][id] = finalMessage;
             saveLocalDB(db);
             return;
         }
-
-        const finalMessage = {
-            ...data,
-            timestamp: serverTimestamp()
-        };
 
         await addDoc(collection(db, `sessions/${sessionId}/messages`), finalMessage);
     },
@@ -373,33 +306,5 @@ export const StorageService = {
 
             callback(sorted);
         });
-    },
-
-    // --- Assets (Storage) ---
-    async uploadImage(blob: Blob, path: string): Promise<string> {
-        if (USE_MOCK || USE_FALLBACK) {
-            // CRITICAL: For mock/fallback, we keep the data in memory/local storage.
-            // Converting blob to base64 is safer for persistence than URL.createObjectURL
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        }
-
-        try {
-            const storageRef = ref(storage, path);
-            const snapshot = await uploadBytes(storageRef, blob, {
-                contentType: blob.type
-            });
-            const downloadURL = await getDownloadURL(snapshot.ref);
-            console.log("[STORAGE] Image uploaded successfully:", downloadURL);
-            return downloadURL;
-        } catch (error) {
-            console.error("[STORAGE] Firebase Upload Failed:", error);
-            // If real storage fails, we might be hitting a bucket config issue.
-            throw error;
-        }
     }
 };

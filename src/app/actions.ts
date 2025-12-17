@@ -1,6 +1,9 @@
 "use server";
 
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Initialize Gemini for text generation (if needed for refinements)
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export async function generatePackagingDesign(prompt: string, base64Image?: string) {
     console.log("🎨 [SERVER] generatePackagingDesign called with prompt:", prompt);
@@ -9,30 +12,38 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
     const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. Modern, sleek, industrial aesthetic, bold typography. Physical product box or pouch on clean background. Studio lighting, 4k, photorealistic, professional product shot.`;
 
     try {
-        // Try OpenAI DALL-E 3
-        const openaiKey = process.env.OPENAI_API_KEY;
+        // Try Stability AI (simple API key, works great!)
+        const stabilityKey = process.env.STABILITY_API_KEY;
 
-        if (openaiKey) {
-            console.log("[SERVER] Using OpenAI DALL-E 3");
+        if (stabilityKey) {
+            console.log("[SERVER] Using Stability AI (Stable Diffusion 3.5)");
 
-            const openai = new OpenAI({ apiKey: openaiKey });
-
-            const response = await openai.images.generate({
-                model: "dall-e-3",
-                prompt: enhancedPrompt,
-                n: 1,
-                size: "1024x1024",
-                quality: "standard",
-                response_format: "url"
+            const response = await fetch("https://api.stability.ai/v2beta/stable-image/generate/sd3", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${stabilityKey}`,
+                    "Accept": "image/*"
+                },
+                body: new URLSearchParams({
+                    prompt: enhancedPrompt,
+                    output_format: "png",
+                    aspect_ratio: "4:5",
+                    model: "sd3.5-large"
+                })
             });
 
-            if (response.data?.[0]?.url) {
-                console.log("[SERVER] Successfully generated image URL with OpenAI DALL-E 3");
+            if (response.ok) {
+                const imageBlob = await response.arrayBuffer();
+                const base64 = Buffer.from(imageBlob).toString('base64');
+                console.log("[SERVER] Successfully generated image with Stability AI");
                 return {
                     success: true,
-                    imageUrl: response.data[0].url,
+                    imageUrl: `data:image/png;base64,${base64}`,
                     isMock: false
                 };
+            } else {
+                const errorText = await response.text();
+                console.warn("[SERVER] Stability AI error:", response.status, errorText);
             }
         }
 
@@ -65,18 +76,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
     } catch (error) {
         console.error("[SERVER] Generation failed:", error);
 
-        // If it was an actual API failure (not missing key), we should report it
-        const errorMsg = String(error);
-        if (errorMsg.includes("401") || errorMsg.includes("API key")) {
-            return {
-                success: false,
-                imageUrl: "",
-                isMock: false,
-                error: "DALL-E 3 Authentication fails. Please check OPENAI_API_KEY in Vercel."
-            };
-        }
-
-        // Smart fallback based on prompt if it wasn't a hard API error
+        // Smart fallback based on prompt
         const themeImages: Record<string, string> = {
             "ice cream": "https://images.unsplash.com/photo-1633053699042-45e053eb813d?q=80&w=800",
             "coca": "https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800",
@@ -98,7 +98,7 @@ export async function generatePackagingDesign(prompt: string, base64Image?: stri
             success: true,
             imageUrl: selectedImage,
             isMock: true,
-            error: errorMsg
+            error: String(error)
         };
     }
 }

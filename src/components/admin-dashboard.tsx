@@ -31,80 +31,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
     const [refineText, setRefineText] = useState("");
     const [adminInput, setAdminInput] = useState("");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [genStatus, setGenStatus] = useState<string | null>(null);
-    const isGeneratingRef = useRef(false);
-
-    const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-
-    // Helper function to upload images (URL or base64) to Firebase Storage
-    const uploadToStorage = async (dataOrUrl: string, path: string): Promise<string | null> => {
-        try {
-            setGenStatus("Processing image...");
-
-            // fetch() works for both external URLs and data: URIs
-            const response = await fetch(dataOrUrl);
-            const blob = await response.blob();
-
-            setGenStatus(`Uploading to Storage (${Math.round(blob.size / 1024)}KB)...`);
-            const url = await StorageService.uploadImage(blob, path);
-            return url;
-        } catch (error) {
-            console.error("[ADMIN] Failed to upload image:", error);
-            setGenStatus("Upload failed!");
-            return null;
-        }
-    };
-
-    // Unified design generation and saving logic
-    const handleDesignWorkflow = async (prompt: string) => {
-        if (!selectedSessionId || isGeneratingRef.current) return;
-
-        console.log("🎨 [ADMIN] Starting design workflow for:", prompt);
-        setIsGenerating(true);
-        isGeneratingRef.current = true;
-        setGenStatus("AI is thinking...");
-
-        try {
-            const result = await generatePackagingDesign(prompt);
-            console.log("🎨 [ADMIN] Generation result:", result);
-
-            if (result.success && result.imageUrl) {
-                let finalImageUrl = result.imageUrl;
-
-                // Move image to permanent Storage (either from URL or base64)
-                setGenStatus("Storing permanently...");
-                const uploadedUrl = await uploadToStorage(result.imageUrl, `designs/${selectedSessionId}/${Date.now()}.png`);
-
-                if (uploadedUrl) {
-                    finalImageUrl = uploadedUrl;
-                } else {
-                    console.error("❌ [ADMIN] Storage upload failed - using temporary link");
-                    // If it's a data URI, this might still fail in Firestore later
-                }
-
-                setGenStatus("Saving to database...");
-                await StorageService.updateSessionPendingDesign(selectedSessionId, {
-                    originalPrompt: prompt,
-                    imageUrl: finalImageUrl,
-                    status: 'generated',
-                    timestamp: Date.now() // Track when it was generated to avoid loops
-                });
-                console.log("✅ [ADMIN] Design saved and updated!");
-                setGenStatus(null);
-            } else {
-                throw new Error(result.error || "Generation failed without error message");
-            }
-        } catch (error) {
-            console.error("❌ [ADMIN] Design Workflow Failed:", error);
-            const msg = (error as any).message || String(error);
-            setGenStatus("Failure!");
-            alert(`DESIGN ERROR: ${msg}\n\nPlease check console for technical details.`);
-        } finally {
-            setIsGenerating(false);
-            isGeneratingRef.current = false;
-        }
-    };
 
     // Log state changes can be removed or reduced to errors only
     useEffect(() => {
@@ -114,6 +40,8 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
         // Debug: Check available models
         listAvailableModels().then(res => console.log("🔍 [ADMIN] Available Models:", res));
     }, [pendingDesign]);
+
+    const onToggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     // Initial Load
     useEffect(() => {
@@ -169,10 +97,19 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             hasImageUrl: pendingDesign?.imageUrl ? true : false
         });
 
-        // CHECK: If the last message is already from AI, we don't need to auto-generate
-        const lastMessage = activeMessages[activeMessages.length - 1];
-        if (lastMessage?.role === 'ai') {
-            console.log("⏭️ [ADMIN] Last message is AI, skipping auto-gen");
+        if (!selectedSessionId) {
+            console.log("⏭️ [ADMIN] No session selected, skipping auto-gen");
+            return;
+        }
+
+        if (!activeMessages.length) {
+            console.log("⏭️ [ADMIN] No messages yet, skipping auto-gen");
+            return;
+        }
+
+        // Check if pendingDesign has an actual image, not just if it exists
+        if (pendingDesign?.imageUrl) {
+            console.log("⏭️ [ADMIN] Already has pendingDesign with image, skipping auto-gen");
             return;
         }
 
@@ -186,20 +123,62 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             return;
         }
 
-        // PREVENT LOOP: Check if we've already generated/handled this message
-        // If the last message isn't from the client, or if the client hasn't spoken since the last design
-        // we should probably stop.
-
         console.log("✅ [ADMIN] Conditions met, will auto-generate from:", lastClientMessage.content);
-        handleDesignWorkflow(lastClientMessage.content);
-    }, [selectedSessionId, activeMessages, pendingDesign, isGenerating]);
+
+        // Auto-generate design from last client message
+        const generateDesign = async () => {
+            console.log("🎨 [ADMIN] Auto-generating design for client message:", lastClientMessage.content);
+
+            try {
+                const result = await generatePackagingDesign(lastClientMessage.content);
+                console.log("🎨 [ADMIN] AI Result:", result);
+
+                if (result.success && result.imageUrl) {
+                    console.log("✅ [ADMIN] Updating pendingDesign in session:", selectedSessionId);
+                    await StorageService.updateSessionPendingDesign(selectedSessionId, {
+                        originalPrompt: lastClientMessage.content,
+                        imageUrl: result.imageUrl,
+                        status: 'generated'
+                    });
+                    console.log("✅ [ADMIN] PendingDesign updated - should appear in staging area");
+                } else {
+                    console.warn("⚠️ [ADMIN] AI returned success but no imageUrl", result);
+                }
+            } catch (error) {
+                console.error("❌ [ADMIN] AI Generation Failed:", error);
+            }
+        };
+
+        generateDesign();
+    }, [selectedSessionId, activeMessages, pendingDesign]);
 
     // Actions
+    const handleBase64Upload = async (base64: string, sessionId: string) => {
+        try {
+            console.log("📤 [ADMIN] Uploading base64 design to Storage...");
+            const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
+            const { storage } = await import('@/lib/firebase');
+
+            const storagePath = `designs/${sessionId}/${Date.now()}.png`;
+            const storageRef = ref(storage, storagePath);
+
+            // Extract raw base64 data
+            const data = base64.includes(',') ? base64.split(',')[1] : base64;
+            await uploadString(storageRef, data, 'base64', { contentType: 'image/png' });
+            const url = await getDownloadURL(storageRef);
+            console.log("✅ [ADMIN] Upload successful:", url);
+            return url;
+        } catch (err) {
+            console.error("❌ [ADMIN] Upload failed:", err);
+            return null;
+        }
+    };
+
     const handleGenerateDesign = async () => {
-        console.log("🔴 [ADMIN] manual handleGenerateDesign CALLED");
+        console.log("🔴 [ADMIN] handleGenerateDesign CALLED");
 
         if (!selectedSessionId || !activeMessages.length) {
-            console.log("❌ [ADMIN] Early return - no session or messages");
+            console.warn("❌ [ADMIN] Early return - no session or messages");
             return;
         }
 
@@ -212,7 +191,52 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             return;
         }
 
-        await handleDesignWorkflow(lastClientMessage.content);
+        console.log("🎨 [ADMIN] Generating design for:", lastClientMessage.content);
+
+        try {
+            // 1. Try Client-Side Vertex AI (Imagen 3)
+            let result;
+            try {
+                console.log("📍 [ADMIN] Attempting Client-Side Generation (Imagen 3 via Firebase)...");
+                const { AIService } = await import('@/lib/ai-service');
+                result = await AIService.generateImage(lastClientMessage.content);
+                console.log("📍 [ADMIN] Client-Side Result:", result);
+            } catch (clientErr) {
+                console.warn("⚠️ [ADMIN] Client-side generation failed, falling back to server:", clientErr);
+                result = { success: false, imageUrl: "" };
+            }
+
+            // 2. Fallback to Server Action (Themed Stock Images)
+            if (!result || !result.success) {
+                console.log("📍 [ADMIN] Using server fallback...");
+                result = await generatePackagingDesign(lastClientMessage.content);
+                console.log("📍 [ADMIN] Server Result:", result);
+            }
+
+            if (result && result.success && result.imageUrl) {
+                let finalImageUrl = result.imageUrl;
+
+                // If it's a data URL (from AI), upload it to Storage
+                if (result.imageUrl.startsWith('data:')) {
+                    const uploadedUrl = await handleBase64Upload(result.imageUrl, selectedSessionId);
+                    if (uploadedUrl) finalImageUrl = uploadedUrl;
+                }
+
+                console.log("💾 [ADMIN] Saving design to session...");
+                await StorageService.updateSessionPendingDesign(selectedSessionId, {
+                    originalPrompt: lastClientMessage.content,
+                    imageUrl: finalImageUrl,
+                    status: 'generated'
+                });
+                console.log("✅✅✅ [ADMIN] Design Saved Successfully!");
+            } else {
+                console.error("❌ [ADMIN] All generation paths failed");
+                alert("Failed to generate design: " + (result?.error || "Unknown error"));
+            }
+        } catch (error) {
+            console.error("❌ [ADMIN] Critical Failure in handleGenerateDesign:", error);
+            alert("Critical error during generation");
+        }
     };
 
     const handleRefine = async () => {
@@ -256,12 +280,6 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
             isLocked: false,
             isPaid: true
         });
-    };
-
-    const handleClearStaging = async () => {
-        if (!selectedSessionId) return;
-        if (!confirm("Clear the staging area? This will allow you to regenerate a new design.")) return;
-        await StorageService.updateSessionPendingDesign(selectedSessionId, null);
     };
 
     return (
@@ -343,18 +361,10 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                         </button>
                         <button
                             onClick={handleGenerateDesign}
-                            disabled={isGenerating}
-                            className={cn(
-                                "text-white px-4 py-2 font-bold uppercase tracking-widest text-sm transition-colors flex items-center gap-2",
-                                isGenerating ? "bg-zinc-800 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"
-                            )}
+                            className="bg-green-600 text-white px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-green-500 transition-colors flex items-center gap-2"
                         >
-                            {isGenerating ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Wand2 className="w-4 h-4" />
-                            )}
-                            {isGenerating ? genStatus || "Generating..." : "Generate Design"}
+                            <Wand2 className="w-4 h-4" />
+                            Generate Design
                         </button>
                     </div>
                     <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
@@ -414,31 +424,11 @@ export function AdminDashboard({ currentSessionId }: AdminDashboardProps) {
                             <h3 className="text-white text-sm font-bold uppercase flex items-center gap-2">
                                 <Wand2 className="w-4 h-4 text-[var(--accent-yellow)]" /> Staging Area
                             </h3>
-                            <button
-                                onClick={handleClearStaging}
-                                className="text-[10px] text-zinc-500 hover:text-red-400 uppercase transition-colors"
-                            >
-                                Clear
-                            </button>
+                            <span className="text-[10px] text-zinc-500 uppercase">{pendingDesign.status}</span>
                         </div>
 
                         <div className="relative aspect-[4/5] bg-black/50">
-                            {isGenerating ? (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10 p-6 text-center">
-                                    <Loader2 className="w-10 h-10 text-[var(--accent-yellow)] animate-spin mb-4" />
-                                    <div className="text-[var(--accent-yellow)] font-bold uppercase tracking-widest text-xs">{genStatus}</div>
-                                    <div className="text-zinc-500 text-[10px] mt-2 italic px-4">DALL-E 3 is creating your high-res vision. Please don't refresh.</div>
-                                </div>
-                            ) : null}
-                            <img
-                                src={pendingDesign.imageUrl}
-                                className={cn("w-full h-full object-contain transition-opacity duration-500", isGenerating ? "opacity-30" : "opacity-100")}
-                                alt="Staged"
-                                onError={(e) => {
-                                    console.error("Image load failed, showing placeholder");
-                                    e.currentTarget.src = "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?q=80&w=800";
-                                }}
-                            />
+                            <img src={pendingDesign.imageUrl} className="w-full h-full object-contain" alt="Staged" />
                         </div>
 
                         <div className="p-4 space-y-3">
