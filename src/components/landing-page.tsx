@@ -36,14 +36,16 @@ export function LandingPage({ onStart, onAdminLogin }: LandingPageProps) {
                     </p>
                 </div>
 
-                <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto font-light leading-relaxed">
-                    The future of product design is automated. Collaborate with our advanced AI to generate production-ready packaging in seconds.
+                <p className="text-zinc-400 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
+                    Get production-ready packaging designs in under 10 minutes.
+                    <br />
+                    <span className="text-[var(--accent-yellow)] font-bold">Flat rate $25 per design.</span>
                 </p>
 
                 <div className="pt-8">
                     <button
                         onClick={onStart}
-                        className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-black bg-[var(--accent-yellow)] overflow-hidden transition-all duration-300 hover:bg-white focus:outline-none ring-offset-2 focus:ring-2 ring-[var(--accent-yellow)]"
+                        className="group relative px-8 py-4 bg-[var(--accent-yellow)] text-black font-black text-lg uppercase tracking-widest hover:bg-white transition-all duration-300 clip-path-slant focus:outline-none ring-offset-2 focus:ring-2 ring-[var(--accent-yellow)]"
                     >
                         <span className="relative z-10 flex items-center gap-2">
                             START PROJECT <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />

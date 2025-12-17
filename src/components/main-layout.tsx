@@ -1,24 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Message, DesignSession } from "@/types";
+import { Message, DesignSession, Attachment } from "@/types";
 import { LandingPage } from "@/components/landing-page";
 import { ChatInterface } from "@/components/chat-interface";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { generatePackagingDesign } from "@/app/actions";
-import { db } from "@/lib/firebase";
-import {
-    collection,
-    addDoc,
-    onSnapshot,
-    query,
-    orderBy,
-    serverTimestamp,
-    doc,
-    setDoc,
-    getDoc,
-    updateDoc
-} from "firebase/firestore";
+import { StorageService } from "@/lib/storage-service";
 
 export function MainLayout() {
     const [hasStarted, setHasStarted] = useState(false);
@@ -42,13 +30,8 @@ export function MainLayout() {
             let storedId = localStorage.getItem("designhaus_session_id");
 
             if (!storedId) {
-                // Create new session
-                const sessionRef = await addDoc(collection(db, "sessions"), {
-                    clientName: `Client-${Math.floor(Math.random() * 10000)}`,
-                    createdAt: serverTimestamp(),
-                    started: false
-                });
-                storedId = sessionRef.id;
+                // Create new session via Service
+                storedId = await StorageService.createSession();
                 localStorage.setItem("designhaus_session_id", storedId);
             }
             setSessionId(storedId);
@@ -59,76 +42,84 @@ export function MainLayout() {
         }
     }, []);
 
-    // 2. Listen to Messages & Session Data
+    // 2. Listen to Messages & Session Data via Service
     useEffect(() => {
         if (!sessionId) return;
 
         // Listen to Messages
-        const q = query(collection(db, `sessions/${sessionId}/messages`), orderBy("timestamp", "asc"));
-        const unsubscribeMessages = onSnapshot(q, (snapshot) => {
-            const msgs = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data(),
-                timestamp: d.data().timestamp?.toDate() || new Date() // Convert Firestore Timestamp
-            })) as Message[];
+        const unsubMessages = StorageService.subscribeToMessages(sessionId, (msgs) => {
             setMessages(msgs);
         });
 
-        // Listen to Session (for pendingDesign sync)
-        const unsubscribeSession = onSnapshot(doc(db, "sessions", sessionId), (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
+        // Listen to Session (for pendingDesign sync and started status)
+        const unsubSession = StorageService.subscribeToSession(sessionId, (data) => {
+            if (data) {
                 setPendingDesign(data.pendingDesign);
-                if (data.started) setHasStarted(true);
+                // removing auto-start to preventing locking user in chat
+                // if (data.started) setHasStarted(true); 
             }
         });
 
         return () => {
-            unsubscribeMessages();
-            unsubscribeSession();
+            if (unsubMessages) unsubMessages();
+            if (unsubSession) unsubSession();
         };
     }, [sessionId]);
 
     const handleStart = async () => {
         setHasStarted(true);
         if (sessionId) {
-            await updateDoc(doc(db, "sessions", sessionId), { started: true });
+            await StorageService.startSession(sessionId);
 
             // Welcome message if empty
+            // Note: We check if messages are empty locally, but service might be async.
+            // Small race condition possible, but acceptable for demo.
             if (messages.length === 0) {
-                await addDoc(collection(db, `sessions/${sessionId}/messages`), {
+                await StorageService.addMessage(sessionId, {
                     role: 'ai',
-                    content: "Welcome to DesignHaus. I am your packaging architect. Upload a reference or describe your product concept.",
-                    timestamp: serverTimestamp()
+                    content: `Welcome to DesignHaus! 🍬
+
+We're here to help bring your design ideas to life and ready for **PRINT** in under 10 minutes. You get the file and send it to your print shop.
+
+**To get started:**
+1. Describe your idea & flavor name.
+2. Attach your **Logo** or brand name (if you have one).
+3. Send your **Instagram @handle** so we can create a QR code on the design.
+
+Describe your vision, and you'll receive your file! 🍫`
                 });
             }
         }
     };
 
-    const handleSendMessage = async (text: string) => {
+    const handleExit = () => {
+        setHasStarted(false);
+    };
+
+    const handleSendMessage = async (text: string, attachments: Attachment[], audioUrl?: string) => {
         if (!sessionId) return;
 
-        // 1. Write User Message to Firestore
-        await addDoc(collection(db, `sessions/${sessionId}/messages`), {
+        // 1. Write User Message to Service
+        await StorageService.addMessage(sessionId, {
             role: 'user',
             content: text,
-            timestamp: serverTimestamp()
+            audioUrl: audioUrl || undefined,
+            attachments: attachments
         });
 
-        // 2. Trigger AI (Client-side trigger, updates Firestore)
-        // In a real secure app, this would be a Cloud Function listener.
-        // Here, the client acts as the orchestrator.
+        // 2. Trigger AI
         try {
-            const result = await generatePackagingDesign(text);
+            const prompt = audioUrl ? `[Voice Note: ${text}]` : text;
+            // Also consider attachments in prompt context ideally
+            const finalPrompt = attachments.length > 0 ? `[Attachments] ${prompt}` : prompt;
+
+            const result = await generatePackagingDesign(finalPrompt);
             if (result.success && result.imageUrl) {
-                // Update the Session Document with Pending Design
-                // The Admin is listening to this document!
-                await updateDoc(doc(db, "sessions", sessionId), {
-                    pendingDesign: {
-                        originalPrompt: text,
-                        imageUrl: result.imageUrl,
-                        status: 'generated'
-                    }
+                // Update Session with Pending Design
+                StorageService.updateSessionPendingDesign(sessionId, {
+                    originalPrompt: finalPrompt,
+                    imageUrl: result.imageUrl,
+                    status: 'generated'
                 });
             }
         } catch (e) {
@@ -137,6 +128,8 @@ export function MainLayout() {
     };
 
     const handleAdminLogin = () => {
+        // Admin Login Logic...
+        // Note: For localhost demo, we allow easy switching
         const password = window.prompt("Enter Admin Password:");
         if (password === "adam123") {
             setIsAdminMode(true);
@@ -144,52 +137,6 @@ export function MainLayout() {
         } else {
             alert("Access Denied");
         }
-    };
-
-    // --- Admin Actions (Now write to Firestore) ---
-
-    const handleRefine = async (instructions: string) => {
-        // In reality, this would perform a new generation. 
-        // Here we just update the status so the Client *doesn't* see it yet, but Admin does.
-        if (sessionId && pendingDesign) {
-            await updateDoc(doc(db, "sessions", sessionId), {
-                "pendingDesign.status": "refined",
-                // "pendingDesign.imageUrl": newImageUrl // if we had one
-            });
-        }
-    };
-
-    const handleSendProposal = async (price: number) => {
-        if (!sessionId || !pendingDesign) return;
-
-        // 1. Add Message
-        await addDoc(collection(db, `sessions/${sessionId}/messages`), {
-            role: 'ai',
-            content: "I have generated a concept based on your specifications. Please unlock the high-resolution render below.",
-            timestamp: serverTimestamp(),
-            imageUrl: pendingDesign.imageUrl,
-            isLocked: true,
-            proposalAmount: price,
-            isProposal: true,
-            isPaid: false
-        });
-
-        // 2. Clear Pending Design
-        await updateDoc(doc(db, "sessions", sessionId), {
-            pendingDesign: null
-            // Firestore requires 'deleteField()' normally, or just null/undefined logic.
-            // We will set it to null.
-        });
-    };
-
-    const handleUnlock = async (messageId: string) => {
-        if (!sessionId) return;
-        // Update the specific message
-        const msgRef = doc(db, `sessions/${sessionId}/messages`, messageId);
-        await updateDoc(msgRef, {
-            isLocked: false,
-            isPaid: true
-        });
     };
 
     if (!hasStarted && !isAdminMode) {
@@ -213,12 +160,11 @@ export function MainLayout() {
                 <ChatInterface
                     messages={messages}
                     onSendMessage={handleSendMessage}
+                    onExit={!isAdminMode ? handleExit : undefined}
                 />
 
                 {isAdminMode && (
                     <AdminDashboard
-                        // In a real app, AdminDashboard would fetch ALL sessions. 
-                        // For now, let's pass the CURRENT session ID so it can "manage" it or list others.
                         currentSessionId={sessionId}
                         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                         isSidebarOpen={isSidebarOpen}

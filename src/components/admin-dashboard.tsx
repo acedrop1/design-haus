@@ -2,17 +2,7 @@ import { useState, useEffect } from "react";
 import { Menu, Wand2, Send, RefreshCcw } from "lucide-react";
 import { Message, DesignSession } from "@/types";
 import { cn } from "@/lib/utils";
-import { db } from "@/lib/firebase";
-import {
-    collection,
-    query,
-    orderBy,
-    onSnapshot,
-    doc,
-    updateDoc,
-    serverTimestamp,
-    addDoc
-} from "firebase/firestore";
+import { StorageService } from "@/lib/storage-service";
 
 interface AdminDashboardProps {
     currentSessionId: string | null;
@@ -41,15 +31,10 @@ export function AdminDashboard({
 
     // 1. Listen to All Sessions
     useEffect(() => {
-        const q = query(collection(db, "sessions"), orderBy("createdAt", "desc"));
-        const unsub = onSnapshot(q, (snapshot) => {
-            const sess = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            })) as DesignSession[];
+        const unsub = StorageService.subscribeToAllSessions((sess) => {
             setSessions(sess);
         });
-        return () => unsub();
+        return () => { if (unsub) unsub(); }
     }, []);
 
     // 2. Listen to Selected Session
@@ -57,35 +42,30 @@ export function AdminDashboard({
         if (!selectedSessionId) return;
 
         // Sync Messages
-        const qMsg = query(collection(db, `sessions/${selectedSessionId}/messages`), orderBy("timestamp", "asc"));
-        const unsubMsg = onSnapshot(qMsg, (snapshot) => {
-            const msgs = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data(),
-                timestamp: d.data().timestamp?.toDate ? d.data().timestamp.toDate() : new Date()
-            })) as Message[];
+        const unsubMsg = StorageService.subscribeToMessages(selectedSessionId, (msgs) => {
             setActiveMessages(msgs);
         });
 
         // Sync Session Pending Design
-        const unsubSess = onSnapshot(doc(db, "sessions", selectedSessionId), (d) => {
-            if (d.exists()) {
-                setPendingDesign(d.data().pendingDesign);
+        const unsubSess = StorageService.subscribeToSession(selectedSessionId, (data) => {
+            if (data) {
+                setPendingDesign(data.pendingDesign);
             }
         });
 
         return () => {
-            unsubMsg();
-            unsubSess();
+            if (unsubMsg) unsubMsg();
+            if (unsubSess) unsubSess();
         };
     }, [selectedSessionId]);
 
     // Actions
     const handleRefine = async () => {
-        // In a real app, trigger logic. Here, update status.
         if (!selectedSessionId || !pendingDesign) return;
-        await updateDoc(doc(db, "sessions", selectedSessionId), {
-            "pendingDesign.status": "refined"
+        // Just mock status update
+        StorageService.updateSessionPendingDesign(selectedSessionId, {
+            ...pendingDesign,
+            status: 'refined'
         });
         setRefineText("");
     };
@@ -94,10 +74,9 @@ export function AdminDashboard({
         if (!selectedSessionId || !pendingDesign) return;
 
         // Add Message
-        await addDoc(collection(db, `sessions/${selectedSessionId}/messages`), {
-            role: 'ai',
+        await StorageService.addMessage(selectedSessionId, {
+            role: 'ai', // Internal role stays 'ai' for logic, UI displays 'Designer'
             content: "I have generated a concept based on your specifications. Please unlock the high-resolution render below.",
-            timestamp: serverTimestamp(),
             imageUrl: pendingDesign.imageUrl,
             isLocked: true,
             proposalAmount: price,
@@ -106,14 +85,12 @@ export function AdminDashboard({
         });
 
         // Clear Pending
-        await updateDoc(doc(db, "sessions", selectedSessionId), {
-            pendingDesign: null
-        });
+        StorageService.updateSessionPendingDesign(selectedSessionId, null);
     };
 
     const handleUnlock = async (messageId: string) => {
         if (!selectedSessionId) return;
-        await updateDoc(doc(db, `sessions/${selectedSessionId}/messages`, messageId), {
+        await StorageService.updateMessage(selectedSessionId, messageId, {
             isLocked: false,
             isPaid: true
         });
@@ -148,7 +125,7 @@ export function AdminDashboard({
                         >
                             <div className="flex justify-between items-start mb-1">
                                 <span className="text-white font-medium text-sm">{session.clientName}</span>
-                                <span className="text-[10px] text-zinc-600">{session.id.slice(0, 4)}</span>
+                                <span className="text-[10px] text-zinc-600">{session.id.slice(0, 8)}</span>
                             </div>
                         </div>
                     ))}

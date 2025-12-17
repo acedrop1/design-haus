@@ -1,17 +1,29 @@
 import { useRef, useEffect, useState } from "react";
-import { Send, Image as ImageIcon, Lock, Download, Paperclip } from "lucide-react";
+import { Send, Image as ImageIcon, Lock, Download, Paperclip, Mic, Square, X, FileText } from "lucide-react";
 import { Message, Attachment } from "@/types";
 import { cn } from "@/lib/utils";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface ChatInterfaceProps {
     messages: Message[];
-    onSendMessage: (text: string, attachments: Attachment[]) => void;
+    onSendMessage: (text: string, attachments: Attachment[], audioUrl?: string) => void;
     isReadOnly?: boolean;
+    onExit?: () => void;
 }
 
-export function ChatInterface({ messages, onSendMessage, isReadOnly = false }: ChatInterfaceProps) {
+export function ChatInterface({ messages, onSendMessage, isReadOnly = false, onExit }: ChatInterfaceProps) {
     const [inputText, setInputText] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Attachments
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [tempAttachments, setTempAttachments] = useState<Attachment[]>([]);
+
+    // Voice Recording State
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -22,9 +34,10 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false }: C
     }, [messages]);
 
     const handleSend = () => {
-        if (!inputText.trim()) return;
-        onSendMessage(inputText, []);
+        if (!inputText.trim() && tempAttachments.length === 0) return;
+        onSendMessage(inputText, tempAttachments);
         setInputText("");
+        setTempAttachments([]); // Clear attachments after send
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -34,15 +47,89 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false }: C
         }
     };
 
-    const formatTime = (ts: any) => {
-        if (!ts) return "";
-        // Handle Firestore Timestamp or standard Date
-        const date = ts?.toDate ? ts.toDate() : new Date(ts);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // --- Attachments Logic ---
+    const handlePaperclipClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+
+            // Convert to Base64 for Mock/Local usage
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64Info = reader.result as string;
+                // Determine type
+                const type = file.type.startsWith('image/') ? 'image' : 'file';
+
+                setTempAttachments(prev => [...prev, {
+                    type,
+                    url: base64Info, // In a real app, upload first like Audio, but Base64 is fine for text-based JSON storage
+                    name: file.name
+                }]);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    // --- Voice Logic (Same as before) ---
+    const startRecording = async () => {
+        try {
+            if (typeof window === 'undefined') return; // Safety
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    setAudioChunks((prev) => [...prev, e.data]);
+                }
+            };
+
+            recorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                // Simplified Logic: Convert Audio to Base64 for LocalStorage stability!
+                // Firebase Storage might fail without keys, breaking the "Mock" promise.
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    const base64 = reader.result as string;
+                    onSendMessage("Voice Note 🎤", [], base64);
+                    setAudioChunks([]);
+                }
+            };
+
+            recorder.start();
+            setIsRecording(true);
+        } catch (err: any) {
+            console.error("Error accessing microphone:", err);
+            // Fallback alert
+            alert("Microphone access denied or not available (Ensure HTTPS or Localhost).");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
     };
 
     return (
         <div className="flex flex-col h-full bg-black/50 backdrop-blur-xl relative">
+            {/* Exit Button */}
+            {onExit && (
+                <button
+                    onClick={onExit}
+                    className="absolute top-4 right-4 z-50 p-2 bg-black/50 hover:bg-black text-zinc-400 hover:text-white rounded-full border border-zinc-800 transition-colors"
+                    title="Exit Chat"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+            )}
+
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
                 {messages.map((message) => (
                     <div
@@ -60,6 +147,29 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false }: C
                                     : "bg-zinc-900 border border-zinc-800 text-gray-200 rounded-tl-sm"
                             )}
                         >
+                            {/* Actual Audio Render */}
+                            {message.audioUrl && (
+                                <div className="mb-2 min-w-[200px]">
+                                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                    <audio controls src={message.audioUrl} className="w-full h-8" />
+                                </div>
+                            )}
+
+                            {/* Attachments Render */}
+                            {message.attachments && message.attachments.length > 0 && (
+                                <div className="mb-2 flex flex-wrap gap-2">
+                                    {message.attachments.map((att, idx) => (
+                                        att.type === 'image' ? (
+                                            <img key={idx} src={att.url} alt="attachment" className="w-32 h-32 object-cover rounded-lg border border-black/10" />
+                                        ) : (
+                                            <div key={idx} className="flex items-center gap-2 bg-black/10 p-2 rounded text-xs">
+                                                <FileText className="w-4 h-4" /> {att.name || "File"}
+                                            </div>
+                                        )
+                                    ))}
+                                </div>
+                            )}
+
                             {message.content && <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>}
 
                             {/* Proposal / Design Logic */}
@@ -106,42 +216,87 @@ export function ChatInterface({ messages, onSendMessage, isReadOnly = false }: C
                             )}
 
                             <div className="text-[10px] uppercase tracking-widest text-zinc-500 mt-2 text-right">
-                                {message.role === 'user' ? 'Client' : 'DesignHaus AI'} • {formatTime(message.timestamp)}
-                            </div>
-                        </div>
+                                {message.role === 'user' ? 'Client' : 'DesignHaus'}
+                            </div>              </div>
+                    </div>
                     </div>
                 ))}
-                <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Area */}
-            {!isReadOnly && (
-                <div className="p-4 md:p-6 bg-black border-t border-white/10">
-                    <div className="max-w-4xl mx-auto flex items-end gap-3 bg-zinc-900/50 p-2 rounded-2xl border border-white/5 focus-within:border-[var(--accent-yellow)]/50 transition-colors">
-                        <button className="p-3 text-zinc-400 hover:text-white transition-colors">
-                            <Paperclip className="w-5 h-5" />
-                        </button>
-                        <textarea
-                            value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Describe your packaging concept..."
-                            className="flex-1 bg-transparent border-none text-white placeholder-zinc-500 focus:ring-0 resize-none py-3 max-h-32"
-                            rows={1}
-                        />
-                        <button
-                            onClick={handleSend}
-                            disabled={!inputText.trim()}
-                            className="p-3 bg-[var(--accent-yellow)] text-black rounded-xl hover:bg-white disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all"
-                        >
-                            <Send className="w-5 h-5" />
-                        </button>
-                    </div>
-                    <p className="text-center text-[10px] text-zinc-600 mt-3 uppercase tracking-widest">
-                        AI-Generated Concepts. Professional Review Required.
-                    </p>
-                </div>
-            )}
+            <div ref={messagesEndRef} />
         </div>
+
+            {/* Input Area */ }
+    {
+        !isReadOnly && (
+            <div className="p-4 md:p-6 bg-black border-t border-white/10">
+                {/* Pending Attachments Preview */}
+                {tempAttachments.length > 0 && (
+                    <div className="flex gap-2 px-2 pb-2 overflow-x-auto">
+                        {tempAttachments.map((att, i) => (
+                            <div key={i} className="relative bg-zinc-800 p-1 rounded">
+                                {att.type === 'image' ? (
+                                    <img src={att.url} className="w-10 h-10 object-cover rounded" alt="prev" />
+                                ) : (
+                                    <FileText className="w-10 h-10 p-2 text-zinc-400" />
+                                )}
+                                <button onClick={() => setTempAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center text-[10px]">×</button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <div className="max-w-4xl mx-auto flex items-end gap-3 bg-zinc-900/50 p-2 rounded-2xl border border-white/5 focus-within:border-[var(--accent-yellow)]/50 transition-colors">
+
+                    {/* Attachments Input */}
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        onChange={handleFileSelect}
+                        accept="image/*,.pdf,.doc,.docx" // Broad acceptance
+                    />
+                    <button
+                        onClick={handlePaperclipClick}
+                        className="p-3 text-zinc-400 hover:text-white transition-colors"
+                    >
+                        <Paperclip className="w-5 h-5" />
+                    </button>
+
+                    {/* Mic Button */}
+                    <button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={cn(
+                            "p-3 rounded-xl transition-all duration-300",
+                            isRecording
+                                ? "bg-red-500/20 text-red-500 animate-pulse"
+                                : "text-zinc-400 hover:text-white"
+                        )}
+                    >
+                        {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
+                    </button>
+
+                    <textarea
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={isRecording ? "Listening..." : "Describe your packaging concept..."}
+                        disabled={isRecording}
+                        className="flex-1 bg-transparent border-none text-white placeholder-zinc-500 focus:ring-0 resize-none py-3 max-h-32"
+                        rows={1}
+                    />
+                    <button
+                        onClick={handleSend}
+                        disabled={!inputText.trim() && !isRecording && tempAttachments.length === 0}
+                        className="p-3 bg-[var(--accent-yellow)] text-black rounded-xl hover:bg-white disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all"
+                    >
+                        <Send className="w-5 h-5" />
+                    </button>
+                </div>
+                <p className="text-center text-[10px] text-zinc-600 mt-3 uppercase tracking-widest">
+                    DesignHaus Concept Generation. Professional Review Required.
+                </p>          </p>
+                </div >
+            )
+    }
+        </div >
     );
 }

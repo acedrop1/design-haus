@@ -1,32 +1,39 @@
+```typescript
 import { Timestamp } from 'firebase/firestore';
 
 export type Role = 'user' | 'ai' | 'admin';
 
 export interface Attachment {
-    type: 'image';
+    type: 'image' | 'file';
     url: string;
     name?: string;
 }
 
 export interface Message {
-    id: string; // Firestore Doc ID
+    id: string;
     role: Role;
     content: string;
     timestamp: Date | Timestamp; // Allow Firestore Timestamp
     attachments?: Attachment[];
+    audioUrl?: string; // For Voice Notes
 
     // Proposal fields
     isProposal?: boolean;
-    isLocked?: boolean;
     proposalAmount?: number;
+    isLocked?: boolean;
+    isPaid?: boolean;
     imageUrl?: string;
-    isPaid?: boolean; // Track paid status directly
 }
 
 export interface DesignSession {
     id: string;
-    clientName: string; // e.g., "Client-123"
-    createdAt: Date | Timestamp;
-    lastMessage?: string;
-    unreadCount?: number;
+    clientName: string;
+    createdAt: any;
+    started: boolean;
+    pendingDesign?: {
+        originalPrompt: string;
+        imageUrl: string;
+        status: 'generated' | 'refined';
+    } | null;
 }
+```
