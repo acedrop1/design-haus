@@ -106,8 +106,9 @@ export async function listAvailableModels() {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         const data = await response.json();
 
-        console.log("🔍 [SERVER] Models available:", data.models?.map((m: any) => m.name));
-        return data;
+        const names = data.models?.map((m: any) => m.name) || [];
+        console.log("🔍 [SERVER] Models available (NAMES ONLY):", JSON.stringify(names, null, 2));
+        return names;
     } catch (error) {
         console.error("🔍 [SERVER] Failed to list models:", error);
         return { error: String(error) };
