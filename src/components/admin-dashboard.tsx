@@ -165,7 +165,7 @@ export function AdminDashboard({
 
             {/* Main Admin Overlay (Staging Area) */}
             <div className="flex-1 flex flex-col h-full pointer-events-none relative">
-                <div className="h-16 flex items-center justify-between px-6 pointer-events-auto bg-transparent">
+                <div className="h-16 flex items-center justify-between px-6 pointer-events-auto bg-transparent z-10">
                     <button
                         onClick={onToggleSidebar}
                         className="bg-[var(--accent-yellow)] text-black px-4 py-2 font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors"
@@ -174,6 +174,55 @@ export function AdminDashboard({
                     </button>
                     <div className="bg-black/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full text-zinc-400 text-xs font-mono">
                         Target: {selectedSessionId === currentSessionId ? "This Device" : selectedSessionId?.slice(0, 6)}
+                    </div>
+                </div>
+
+                {/* Chat History View (NEW) */}
+                <div className="absolute inset-0 pt-20 pb-4 px-8 overflow-y-auto pointer-events-auto">
+                    <div className="max-w-3xl mx-auto space-y-4">
+                        {selectedSessionId ? (
+                            activeMessages.length > 0 ? (
+                                activeMessages.map((msg) => (
+                                    <div
+                                        key={msg.id}
+                                        className={cn(
+                                            "flex w-full",
+                                            msg.role === 'user' ? "justify-start" : "justify-end"
+                                        )}
+                                    >
+                                        <div
+                                            className={cn(
+                                                "max-w-[70%] p-4 rounded-2xl text-sm",
+                                                msg.role === 'user'
+                                                    ? "bg-zinc-800 text-white rounded-tl-sm"
+                                                    : "bg-[var(--accent-yellow)] text-black rounded-tr-sm font-medium"
+                                            )}
+                                        >
+                                            {/* Label */}
+                                            <div className="text-[10px] opacity-50 mb-1 uppercase tracking-wider">
+                                                {msg.role === 'user' ? "Client" : "Designer"}
+                                            </div>
+
+                                            {/* Content */}
+                                            {msg.content}
+
+                                            {/* Images/Attachments */}
+                                            {msg.imageUrl && (
+                                                <div className="mt-2 rounded overflow-hidden">
+                                                    <img src={msg.imageUrl} alt="Design" className="w-full h-auto object-cover" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center text-zinc-600 mt-20">No messages in this session</div>
+                            )
+                        ) : (
+                            <div className="text-center text-zinc-600 mt-20">Select a session to view chat</div>
+                        )}
+                        {/* Spacer for Staging Area overlap */}
+                        <div className="h-32"></div>
                     </div>
                 </div>
 
