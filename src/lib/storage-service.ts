@@ -196,23 +196,29 @@ export const StorageService = {
 
     // --- Messages ---
 
-    async addMessage(sessionId: string, message: Partial<Message>) {
-        const finalMessage = {
-            ...message,
-            timestamp: (USE_MOCK || USE_FALLBACK) ? new Date() : serverTimestamp()
-        };
-
+    async addMessage(sessionId: string, data: Partial<Message>) {
         if (USE_MOCK || USE_FALLBACK) {
             const db = getLocalDB();
             const id = "msg_" + Date.now();
 
-            finalMessage.id = id;
+            const finalMessage: Message = {
+                id,
+                role: data.role || 'user',
+                content: data.content || '',
+                timestamp: new Date(),
+                ...data
+            };
 
             if (!db.messages[sessionId]) db.messages[sessionId] = {};
             db.messages[sessionId][id] = finalMessage;
             saveLocalDB(db);
             return;
         }
+
+        const finalMessage = {
+            ...data,
+            timestamp: serverTimestamp()
+        };
 
         await addDoc(collection(db, `sessions/${sessionId}/messages`), finalMessage);
     },
