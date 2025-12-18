@@ -2,7 +2,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
-import { getAI } from "firebase/ai";
+import { getAI, VertexAIBackend } from "firebase/ai";
 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "mock_key_for_build",
@@ -18,6 +18,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
-const vertexAI = getAI(app);
+const vertexAI = getAI(app, {
+    backend: new VertexAIBackend('us-central1')
+});
 
 export { app, db, storage, auth, vertexAI };

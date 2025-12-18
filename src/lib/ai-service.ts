@@ -3,22 +3,27 @@ import { vertexAI } from "./firebase";
 
 export const AIService = {
     async generateImage(prompt: string): Promise<{ success: boolean; imageUrl: string; error?: string }> {
-        console.log("🎨 [CLIENT] Generating image with Firebase Vertex AI (Imagen 3.0 Generate 001)");
+        const tryGenerate = async (modelId: string) => {
+            console.log(`🎨 [CLIENT] Attempting generation with ${modelId}...`);
+            const model = getImagenModel(vertexAI, { model: modelId });
 
-        try {
-            // Initialize Imagen 3 model (Stable version)
-            const model = getImagenModel(vertexAI, {
-                model: "imagen-3.0-generate-001"
-            });
+            const enhancedPrompt = `A stunning, high-definition, professional graphic design of ${prompt}. Clean background, studio lighting, award-winning packaging aesthetic, 8k resolution, photorealistic, premium feel.`;
 
-            const enhancedPrompt = `High quality product photography of a premium packaging design: ${prompt}. Modern, sleek, industrial aesthetic, bold typography. Physical product box or pouch on clean background. Studio lighting, 4k, photorealistic, professional product shot.`;
-
-            // Generate images (using method on model)
-            const result = await (model as any).generateImages({
+            return await (model as any).generateImages({
                 prompt: enhancedPrompt,
-                aspectRatio: "4:5",
+                aspectRatio: "1:1",
                 addWatermark: false,
             });
+        };
+
+        try {
+            let result;
+            try {
+                result = await tryGenerate("imagen-3.0-generate-002");
+            } catch (err: any) {
+                console.warn("⚠️ [CLIENT] Model 002 failed, falling back to 001:", err);
+                result = await tryGenerate("imagen-3.0-generate-001");
+            }
 
             // Inspect response
             const images = result.images;
